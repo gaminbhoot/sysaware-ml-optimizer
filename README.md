@@ -100,7 +100,7 @@ streamlit>=1.32.0
 ## Installation
 
 ```bash
-git clone https://github.com/your-username/sysaware-ml-optimizer.git
+git clone https://github.com/gaminbhoot/sysaware-ml-optimizer.git
 cd sysaware-ml-optimizer
 python -m venv venv
 source venv/bin/activate       # Windows: venv\Scripts\activate
