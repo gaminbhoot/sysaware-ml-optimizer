@@ -155,7 +155,7 @@ Recommendation: Use FP16 on GPU. Memory headroom is sufficient. Expected 2x thro
 
 ---
 
-## Contributing
+## Contributing to the project
 
 1. Fork the repo
 2. Create a feature branch (`git checkout -b feat/your-feature`)
