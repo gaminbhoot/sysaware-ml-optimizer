@@ -4,6 +4,7 @@
 
 ---
 
+
 ## What It Does
 
 Most ML optimization tools assume a fixed environment. This tool doesn't. It reads *your* machine first — CPU cores, RAM, GPU availability, VRAM — and uses that context to decide what optimizations actually make sense for *your* setup.
