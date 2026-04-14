@@ -11,6 +11,7 @@ The project is being implemented in phases. The following pieces are working now
 - System profiling (`core/system_profiler.py`)
 - Model analysis (`core/model_analyzer.py`)
 - Performance estimation (`core/estimator.py`)
+- Command-line pipeline runner (`main.py`)
 - Prompt optimization (`core/prompt_optimizer.py`)
 - Shared contracts, validation, and logging helpers
 
@@ -40,6 +41,7 @@ Results are displayed as **before vs. after comparisons** with latency ranges, m
 - Read your system profile from the GUI or from a one-line Python command.
 - Analyze a loaded PyTorch model for parameter count and approximate size.
 - Estimate performance using a static path and, when possible, a small micro-benchmark.
+- Run the full pipeline from the CLI and print a human-readable or JSON summary.
 - Rewrite user prompts with the optional Prompt Optimizer toggle.
 - Run the project test suite to verify the implemented phases.
 
@@ -183,6 +185,21 @@ streamlit run gui/app.py
 python main.py
 ```
 
+**CLI end-to-end usage:**
+```bash
+python main.py --model-path path\to\model.pt --goal balanced
+```
+
+**JSON output:**
+```bash
+python main.py --model-path path\to\model.pt --goal latency --json
+```
+
+**Optional prompt optimization:**
+```bash
+python main.py --model-path path\to\model.pt --optimize-prompt --prompt-text "rewrite this prompt" --prompt-type coding
+```
+
 **System profiler quick check:**
 ```bash
 python -c "from core.system_profiler import get_system_profile; import json; print(json.dumps(get_system_profile(), indent=2))"
@@ -218,9 +235,11 @@ The project includes phase-based tests for the code that is already implemented.
 - Validation helpers and seed behavior
 - Logger behavior and handler reuse
 - CLI scaffold argument handling
+- CLI pipeline execution and output formatting
 - System profiling, including GPU and failure fallbacks
 - Model analysis, including module-like objects and mappings
 - Performance estimation, including static fallback and benchmark paths
+- Optimizer and strategy/autotune test coverage
 - Prompt optimizer behavior and edge cases
 
 Run the test suite after each phase change so regressions are caught early.
