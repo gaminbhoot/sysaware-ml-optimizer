@@ -4,6 +4,18 @@
 
 ---
 
+## Current Status
+
+The project is being implemented in phases. The following pieces are working now:
+
+- System profiling (`core/system_profiler.py`)
+- Model analysis (`core/model_analyzer.py`)
+- Performance estimation (`core/estimator.py`)
+- Prompt optimization (`core/prompt_optimizer.py`)
+- Shared contracts, validation, and logging helpers
+
+The remaining optimization modules are still in progress.
+
 
 ## What It Does
 
@@ -22,6 +34,14 @@ The pipeline runs end-to-end in six stages, plus one optional prompt quality sta
 | Optional | `prompt_optimizer.py` | Rewrite user prompts with better structure and clarity |
 
 Results are displayed as **before vs. after comparisons** with latency ranges, memory usage, and a final plain-English recommendation.
+
+## What Works Right Now
+
+- Read your system profile from the GUI or from a one-line Python command.
+- Analyze a loaded PyTorch model for parameter count and approximate size.
+- Estimate performance using a static path and, when possible, a small micro-benchmark.
+- Rewrite user prompts with the optional Prompt Optimizer toggle.
+- Run the project test suite to verify the implemented phases.
 
 ---
 
@@ -43,6 +63,7 @@ sysaware-ml-optimizer/
 │   └── app.py                # Streamlit frontend (includes optional prompt optimizer)
 │
 ├── main.py                   # CLI entry point
+├── tests/                    # Phase-based test suite
 ├── requirements.txt
 ├── .gitignore
 └── README.md
@@ -113,6 +134,22 @@ psutil>=5.9.0
 streamlit>=1.32.0
 ```
 
+## Quick Start on Windows
+
+```powershell
+cd D:\sysaware-ml-optimizer
+.\.venv-1\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+If PowerShell blocks script execution, run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+Then activate the environment again.
+
 ---
 
 ## Installation
@@ -123,6 +160,13 @@ cd sysaware-ml-optimizer
 python -m venv venv
 source venv/bin/activate       # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+On Windows with the included environment folder, use:
+
+```powershell
+& .\.venv-1\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 ```
 
 ---
@@ -139,6 +183,16 @@ streamlit run gui/app.py
 python main.py
 ```
 
+**System profiler quick check:**
+```bash
+python -c "from core.system_profiler import get_system_profile; import json; print(json.dumps(get_system_profile(), indent=2))"
+```
+
+**Run the test suite:**
+```bash
+python -m pytest -q
+```
+
 ---
 
 ## GUI Walkthrough
@@ -151,6 +205,25 @@ The Streamlit app has six sections:
 4. **Prompt Optimizer (Optional)** — Toggle on, optimize user prompts, and review rewrite + suggestions.
 5. **Run Optimization** — Single button executes the full model optimization pipeline.
 6. **Results** — Side-by-side before/after table: latency range, memory, speed delta, final recommendation string.
+
+The system profile section is the fastest place to verify the app is reading your local machine correctly.
+
+---
+
+## Verification Notes
+
+The project includes phase-based tests for the code that is already implemented. As of now, the test suite covers:
+
+- Shared contracts and goal constants
+- Validation helpers and seed behavior
+- Logger behavior and handler reuse
+- CLI scaffold argument handling
+- System profiling, including GPU and failure fallbacks
+- Model analysis, including module-like objects and mappings
+- Performance estimation, including static fallback and benchmark paths
+- Prompt optimizer behavior and edge cases
+
+Run the test suite after each phase change so regressions are caught early.
 
 ---
 
