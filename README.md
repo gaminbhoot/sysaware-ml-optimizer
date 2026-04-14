@@ -14,8 +14,12 @@ The project is being implemented in phases. The following pieces are working now
 - Command-line pipeline runner (`main.py`)
 - Prompt optimization (`core/prompt_optimizer.py`)
 - Shared contracts, validation, and logging helpers
+- Strategy engine (`core/strategy_engine.py`)
+- Autotuner (`core/autotuner.py`)
+- Optimizer (`core/optimizer.py`)
+- GUI helpers and reset flow (`gui/helpers.py`)
 
-The remaining optimization modules are still in progress.
+The remaining work is release-hardening and documentation polish.
 
 
 ## What It Does
@@ -44,6 +48,7 @@ Results are displayed as **before vs. after comparisons** with latency ranges, m
 - Run the full pipeline from the CLI and print a human-readable or JSON summary.
 - Rewrite user prompts with the optional Prompt Optimizer toggle.
 - Run the project test suite to verify the implemented phases.
+- Use the Streamlit GUI with system scan, model load, optimization, and reset support.
 
 ---
 
@@ -241,8 +246,12 @@ The project includes phase-based tests for the code that is already implemented.
 - Performance estimation, including static fallback and benchmark paths
 - Optimizer and strategy/autotune test coverage
 - Prompt optimizer behavior and edge cases
+- GUI helper and reset behavior
+- CLI end-to-end execution, JSON output, and prompt-optimizer gating
 
 Run the test suite after each phase change so regressions are caught early.
+
+The repository also includes a GitHub Actions workflow at [.github/workflows/ci.yml](.github/workflows/ci.yml) that installs dependencies and runs the test suite on push and pull request events.
 
 ---
 

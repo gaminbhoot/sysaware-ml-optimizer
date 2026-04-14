@@ -6,14 +6,26 @@ __pycache__/
 # Virtual environments
 venv/
 .venv/
+.venv-1/
 ENV/
 env/
+
+# Local environment and build artifacts
+.env
+.env.*
+.ipynb_checkpoints/
+build/
+dist/
+site/
+*.egg-info/
+.python-version
 
 # Test and tooling caches
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
 coverage.xml
 htmlcov/
 
