@@ -36,7 +36,6 @@ Thumbs.db
 .idea/
 
 # User-requested non-required project artifacts
-tests/
 *requirement*.md
 IMPLEMENTATION_PHASES.md
 REVISED_IMPLEMENTATION_PHASES.md
