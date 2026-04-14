@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import copy
+import io
+import tempfile
+import os
 from typing import Any
 
 from .logging_utils import get_logger
@@ -17,10 +20,34 @@ SUPPORTED_MODES = {"int8", "fp16", "none"}
 
 
 def _clone_model(model: Any) -> Any:
-	try:
-		return copy.deepcopy(model)
-	except Exception:
+	"""
+	Safely clones a model via disk serialization to prevent memory ballooning,
+	avoiding the OOM risks associated with copy.deepcopy().
+	"""
+	if model is None:
 		return model
+
+	if torch is not None and hasattr(torch, "save") and hasattr(torch, "load"):
+		fd = None
+		temp_path = None
+		try:
+			fd, temp_path = tempfile.mkstemp(suffix=".pt")
+			os.close(fd)
+			torch.save(model, temp_path)
+			cloned = torch.load(temp_path, map_location="cpu", weights_only=False)
+			return cloned
+		except Exception as exc:
+			logger.warning("Disk-based cloning failed: %s. Falling back to original model.", exc)
+			return model
+		finally:
+			if temp_path and os.path.exists(temp_path):
+				try:
+					os.remove(temp_path)
+				except Exception:
+					pass
+
+	# Strict fallback to returning reference to avoid deepcopy OOM
+	return model
 
 
 def _base_metadata(method: str, device: str, applied: bool, skipped_reasons: list[str] | None = None) -> dict[str, Any]:
@@ -39,6 +66,10 @@ def no_op_optimization(model: Any, reason: str = "No optimization requested") ->
 def apply_int8_quantization(model: Any) -> tuple[Any, dict[str, Any]]:
 	if model is None:
 		raise ValueError("Model cannot be None")
+
+	# Reject unstructured objects directly without crashing.
+	if isinstance(model, (dict, list, tuple)):
+		return model, _base_metadata("int8", "cpu", False, ["Direct optimization of state dictionaries or tensor collections is not supported. Please instantiate torch.nn.Module."])
 
 	if torch is None or not hasattr(torch, "quantization"):
 		return model, _base_metadata("int8", "cpu", False, ["Torch quantization is unavailable"])
@@ -64,6 +95,9 @@ def convert_to_fp16(model: Any, profile: dict[str, Any]) -> tuple[Any, dict[str,
 		raise ValueError("Model cannot be None")
 	if not isinstance(profile, dict):
 		raise ValueError("Profile must be a dictionary")
+
+	if isinstance(model, (dict, list, tuple)):
+		return model, _base_metadata("fp16", "cuda", False, ["Direct optimization of state dictionaries or tensor collections is not supported. Please instantiate torch.nn.Module."])
 
 	if not profile.get("gpu_available"):
 		return model, _base_metadata("fp16", "cpu", False, ["GPU is not available in the system profile"])

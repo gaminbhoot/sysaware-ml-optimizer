@@ -61,10 +61,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 		choices=["general", "coding", "analysis", "creative"],
 		help="Prompt intent used by the optional prompt optimizer",
 	)
+	parser.add_argument(
+		"--unsafe-load",
+		action="store_true",
+		help="Allow arbitrary code execution by bypassing weights_only during model load",
+	)
 	return parser.parse_args(argv)
 
 
-def load_model_from_path(model_path: str) -> Any:
+def load_model_from_path(model_path: str, unsafe_load: bool = False) -> Any:
 	path = Path(model_path)
 	if not path.exists():
 		raise FileNotFoundError(f"Model file not found: {model_path}")
@@ -75,7 +80,7 @@ def load_model_from_path(model_path: str) -> Any:
 		raise RuntimeError("Torch is required to load model files") from exc
 
 	try:
-		return torch.load(str(path), map_location="cpu")
+		return torch.load(str(path), map_location="cpu", weights_only=not unsafe_load)
 	except Exception as exc:
 		raise RuntimeError(f"Failed to load model '{model_path}': {exc}") from exc
 
@@ -137,7 +142,7 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
 	set_global_seed(args.seed)
 
 	system_profile = get_system_profile()
-	model = load_model_from_path(args.model_path)
+	model = load_model_from_path(args.model_path, args.unsafe_load)
 	model_analysis = analyze_model(model)
 	baseline = estimate_performance(model, system_profile)
 	strategy = get_strategy(system_profile, goal)

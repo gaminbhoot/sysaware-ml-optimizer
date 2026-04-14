@@ -82,18 +82,16 @@ def analyze_model(model: Any) -> ModelAnalysis:
 		size_mb += buffer_size_mb
 
 	elif isinstance(model, Mapping):
-		values = list(model.values())
-		total_params, size_mb = _sum_tensor_collection(values)
-		trainable_params = total_params
-		model_name = type(model).__name__
+		raise NotImplementedError(
+			"Analyzing state dictionaries directly is not supported. Please instantiate the torch.nn.Module first."
+		)
 	elif isinstance(model, (list, tuple)):
-		values = list(model)
-		total_params, size_mb = _sum_tensor_collection(values)
-		trainable_params = total_params
-		model_name = type(model).__name__
+		raise NotImplementedError(
+			"Analyzing unstructured collections of tensors is not supported. Please instantiate the torch.nn.Module first."
+		)
 	else:
 		raise ValueError(
-			"Unsupported model type. Expected a torch.nn.Module or a mapping of tensors."
+			"Unsupported model type. Expected a torch.nn.Module."
 		)
 
 	analysis: ModelAnalysis = {
