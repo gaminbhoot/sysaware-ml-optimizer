@@ -1,6 +1,6 @@
 # sysaware-ml-optimizer
 
-> **System-Aware AI Model Optimization Engine** — Detect your hardware, analyze your PyTorch model, estimate performance, apply optimizations, and get a configuration recommendation. All in a clean Streamlit GUI.
+> **System-Aware AI Model Optimization Engine** — Detect your hardware, analyze your PyTorch model, estimate performance, apply optimizations, and get a configuration recommendation. Includes an optional Prompt Optimizer to improve user prompts for better AI outputs.
 
 ---
 
@@ -8,7 +8,7 @@
 
 Most ML optimization tools assume a fixed environment. This tool doesn't. It reads *your* machine first — CPU cores, RAM, GPU availability, VRAM — and uses that context to decide what optimizations actually make sense for *your* setup.
 
-The pipeline runs end-to-end in six stages:
+The pipeline runs end-to-end in six stages, plus one optional prompt quality stage:
 
 | Stage | Module | Responsibility |
 |---|---|---|
@@ -18,6 +18,7 @@ The pipeline runs end-to-end in six stages:
 | 4 | `optimizer.py` | Apply INT8 quantization or FP16 conversion |
 | 5 | `strategy_engine.py` | Rule-based config recommendation |
 | 6 | `autotuner.py` | Benchmark up to 3 configs, pick the best |
+| Optional | `prompt_optimizer.py` | Rewrite user prompts with better structure and clarity |
 
 Results are displayed as **before vs. after comparisons** with latency ranges, memory usage, and a final plain-English recommendation.
 
@@ -34,10 +35,11 @@ sysaware-ml-optimizer/
 │   ├── estimator.py          # Static estimation + micro-benchmark (5 passes)
 │   ├── optimizer.py          # INT8 quantization, FP16 conversion
 │   ├── strategy_engine.py    # IF/ELSE rule engine → optimization config
-│   └── autotuner.py          # Try ≤3 configs, return best by goal
+│   ├── autotuner.py          # Try ≤3 configs, return best by goal
+│   └── prompt_optimizer.py   # Rule-based prompt rewriting + prompt quality scoring
 │
 ├── gui/
-│   └── app.py                # Streamlit frontend (7 sections)
+│   └── app.py                # Streamlit frontend (includes optional prompt optimizer)
 │
 ├── main.py                   # CLI entry point
 ├── requirements.txt
@@ -56,6 +58,21 @@ When running the tool, you select one of three goals:
 - **Balanced** — Trade-off between speed and memory based on available headroom.
 
 The strategy engine uses **pure rule-based logic** (no ML, no heuristics beyond measured values) to pick the right config.
+
+---
+
+## Optional Prompt Optimizer
+
+The GUI now includes a toggleable **Prompt Optimizer** feature.
+
+- Turn **Enable Prompt Optimizer** on/off from the GUI.
+- Paste any user prompt and choose a prompt type (`general`, `coding`, `analysis`, `creative`).
+- Click **Optimize Prompt** to get:
+  - a rewritten prompt with clearer structure,
+  - quality score before/after,
+  - practical suggestions for improving prompt quality.
+
+This feature is fully **rule-based** and runs locally.
 
 ---
 
@@ -125,13 +142,14 @@ python main.py
 
 ## GUI Walkthrough
 
-The Streamlit app has five sections:
+The Streamlit app has six sections:
 
 1. **System Info** — Click *Analyze System* to read your hardware profile.
 2. **Model Input** — Provide the path to a local `.pt` / `.pth` model file.
 3. **Goal Selection** — Choose *Low Latency*, *Low Memory*, or *Balanced*.
-4. **Run Optimization** — Single button executes the full pipeline.
-5. **Results** — Side-by-side before/after table: latency range, memory, speed delta, final recommendation string.
+4. **Prompt Optimizer (Optional)** — Toggle on, optimize user prompts, and review rewrite + suggestions.
+5. **Run Optimization** — Single button executes the full model optimization pipeline.
+6. **Results** — Side-by-side before/after table: latency range, memory, speed delta, final recommendation string.
 
 ---
 
