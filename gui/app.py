@@ -1,4 +1,10 @@
 import streamlit as st
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from core.contracts import GOALS, GOAL_LABELS
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -292,8 +298,8 @@ with col_mid:
 
     goal = st.radio(
         "goal",
-        options=["latency", "memory", "balanced"],
-        format_func=lambda x: {"latency": "⚡  Low Latency", "memory": "🧠  Low Memory", "balanced": "⚖   Balanced"}[x],
+        options=list(GOALS),
+        format_func=lambda x: GOAL_LABELS[x],
         label_visibility="collapsed",
     )
     st.session_state["goal"] = goal
