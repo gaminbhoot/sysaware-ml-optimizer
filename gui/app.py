@@ -384,7 +384,7 @@ with col_mid:
                 baseline = estimate_performance(model, profile)
                 st.session_state["baseline"] = baseline
             with st.spinner("Generating strategy..."):
-                strategy = get_strategy(profile, goal_v)
+                strategy = get_strategy(profile, goal_v, st.session_state.get("model_analysis"))
                 st.session_state["strategy"] = strategy
             with st.spinner("Autotuning configs..."):
                 best_config, best_model, best_result = autotune(model, profile, goal_v)

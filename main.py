@@ -145,7 +145,7 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
 	model = load_model_from_path(args.model_path, args.unsafe_load)
 	model_analysis = analyze_model(model)
 	baseline = estimate_performance(model, system_profile)
-	strategy = get_strategy(system_profile, goal)
+	strategy = get_strategy(system_profile, goal, model_analysis)
 	best_config, best_model, best_result = autotune(model, system_profile, goal)
 
 	prompt_result = None

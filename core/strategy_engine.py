@@ -10,23 +10,30 @@ from .validation import validate_goal, require_fields, validate_non_negative_num
 logger = get_logger("sysaware.strategy_engine")
 
 
-def _profile_context(profile: dict[str, Any]) -> dict[str, str]:
+def _profile_context(profile: dict[str, Any], model_analysis: dict[str, Any] | None = None) -> dict[str, str]:
 	gpu_available = bool(profile.get("gpu_available", False))
 	gpu_vram_gb = float(profile.get("gpu_vram_gb", 0.0))
 	ram_gb = float(profile.get("ram_gb", 0.0))
 
-	if gpu_available and gpu_vram_gb >= 8.0:
-		gpu_tier = "strong_gpu"
-	elif gpu_available and gpu_vram_gb >= 4.0:
-		gpu_tier = "modest_gpu"
-	elif gpu_available:
-		gpu_tier = "limited_gpu"
+	# Fallback static estimation for old tests if model_analysis is not provided.
+	model_size_gb = max(float(model_analysis.get("size_mb", 1024.0)) / 1024.0, 0.01) if model_analysis else 2.0
+
+	# Dynamic tier calculation: (Available Memory / Estimated Model Size)
+	if gpu_available:
+		gpu_ratio = gpu_vram_gb / model_size_gb
+		if gpu_ratio >= 4.0:
+			gpu_tier = "strong_gpu"
+		elif gpu_ratio >= 1.5:
+			gpu_tier = "modest_gpu"
+		else:
+			gpu_tier = "limited_gpu"
 	else:
 		gpu_tier = "cpu_only"
 
-	if ram_gb >= 16.0:
+	ram_ratio = ram_gb / model_size_gb
+	if ram_ratio >= 4.0:
 		ram_tier = "plenty"
-	elif ram_gb >= 8.0:
+	elif ram_ratio >= 1.5:
 		ram_tier = "moderate"
 	else:
 		ram_tier = "constrained"
@@ -46,7 +53,7 @@ def _build_recommendation(goal: str, optimization: str, device: str, profile_not
 	).strip()
 
 
-def get_strategy(profile: dict[str, Any], goal: str) -> StrategyResult:
+def get_strategy(profile: dict[str, Any], goal: str, model_analysis: dict[str, Any] | None = None) -> StrategyResult:
 	if not isinstance(profile, dict):
 		raise ValueError("Profile must be a dictionary")
 
@@ -59,7 +66,7 @@ def get_strategy(profile: dict[str, Any], goal: str) -> StrategyResult:
 	gpu_name = str(profile.get("gpu_name", "None"))
 	gpu_vram_gb = float(validate_non_negative_number(profile["gpu_vram_gb"], "gpu_vram_gb"))
 
-	context = _profile_context(profile)
+	context = _profile_context(profile, model_analysis)
 	gpu_tier = context["gpu_tier"]
 	ram_tier = context["ram_tier"]
 

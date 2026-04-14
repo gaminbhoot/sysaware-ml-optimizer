@@ -54,12 +54,18 @@ def get_system_profile() -> SystemProfile:
 		if psutil is not None:
 			vm = psutil.virtual_memory()
 			total_bytes = float(getattr(vm, "total", 0.0))
+			available_bytes = float(getattr(vm, "available", 0.0))
 			profile["ram_gb"] = max(_bytes_to_gb(total_bytes), 0.0)
+			profile["ram_available_gb"] = max(_bytes_to_gb(available_bytes), 0.0)
+		else:
+			profile["ram_available_gb"] = profile["ram_gb"]
 	except Exception as exc:
 		logger.warning("RAM detection failed: %s", exc)
 
 	try:
 		cuda: Any = getattr(torch, "cuda", None) if torch is not None else None
+		mps: Any = getattr(getattr(torch, "backends", None), "mps", None) if torch is not None else None
+
 		if cuda is not None and bool(cuda.is_available()):
 			device_idx = 0
 			try:
@@ -72,6 +78,13 @@ def get_system_profile() -> SystemProfile:
 			profile["gpu_available"] = True
 			profile["gpu_name"] = getattr(props, "name", "Unknown GPU") or "Unknown GPU"
 			profile["gpu_vram_gb"] = max(_bytes_to_gb(float(getattr(props, "total_memory", 0.0))), 0.0)
+			
+		elif mps is not None and bool(mps.is_available()):
+			profile["gpu_available"] = True
+			profile["gpu_name"] = "Apple Silicon MPS"
+			# Apple Silicon uses unified memory; safely report the available system RAM as VRAM
+			profile["gpu_vram_gb"] = profile.get("ram_available_gb", profile["ram_gb"])
+
 	except Exception as exc:
 		logger.warning("GPU detection failed: %s", exc)
 
