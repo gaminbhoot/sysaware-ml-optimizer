@@ -1,289 +1,74 @@
-# sysaware-ml-optimizer
+# SysAware ML Optimizer
 
-> **System-Aware AI Model Optimization Engine** — Detect your hardware, analyze your PyTorch model, estimate performance, apply optimizations, and get a configuration recommendation. Includes an optional Prompt Optimizer to improve user prompts for better AI outputs.
+SysAware ML Optimizer is an advanced, hardware-aware tool designed to dynamically profile, compress, and accelerate PyTorch models based on the host system's physical capabilities (CPU, RAM, CUDA VRAM, and Apple Silicon MPS). 
 
----
+Whether deployed via the integrated Streamlit GUI or strictly typed through the Enterprise CLI payload formats, SysAware bridges the gap between deep learning infrastructure and production optimization—assessing latency constraints, dynamically estimating intermediate activation footprints, and autotuning INT8/FP16 models.
 
-## Current Status
+## Key Features
 
-The project is being implemented in phases. The following pieces are working now:
-
-- System profiling (`core/system_profiler.py`)
-- Model analysis (`core/model_analyzer.py`)
-- Performance estimation (`core/estimator.py`)
-- Command-line pipeline runner (`main.py`)
-- Prompt optimization (`core/prompt_optimizer.py`)
-- Shared contracts, validation, and logging helpers
-- Strategy engine (`core/strategy_engine.py`)
-- Autotuner (`core/autotuner.py`)
-- Optimizer (`core/optimizer.py`)
-- GUI helpers and reset flow (`gui/helpers.py`)
-
-The remaining work is release-hardening and documentation polish.
-
-
-## What It Does
-
-Most ML optimization tools assume a fixed environment. This tool doesn't. It reads *your* machine first — CPU cores, RAM, GPU availability, VRAM — and uses that context to decide what optimizations actually make sense for *your* setup.
-
-The pipeline runs end-to-end in six stages, plus one optional prompt quality stage:
-
-| Stage | Module | Responsibility |
-|---|---|---|
-| 1 | `system_profiler.py` | Detect hardware (CPU, RAM, GPU, OS) |
-| 2 | `model_analyzer.py` | Extract model parameters and size |
-| 3 | `estimator.py` | Estimate latency range and memory usage |
-| 4 | `optimizer.py` | Apply INT8 quantization or FP16 conversion |
-| 5 | `strategy_engine.py` | Rule-based config recommendation |
-| 6 | `autotuner.py` | Benchmark up to 3 configs, pick the best |
-| Optional | `prompt_optimizer.py` | Rewrite user prompts with better structure and clarity |
-
-Results are displayed as **before vs. after comparisons** with latency ranges, memory usage, and a final plain-English recommendation.
-
-## What Works Right Now
-
-- Read your system profile from the GUI or from a one-line Python command.
-- Analyze a loaded PyTorch model for parameter count and approximate size.
-- Estimate performance using a static path and, when possible, a small micro-benchmark.
-- Run the full pipeline from the CLI and print a human-readable or JSON summary.
-- Rewrite user prompts with the optional Prompt Optimizer toggle.
-- Run the project test suite to verify the implemented phases.
-- Use the Streamlit GUI with system scan, model load, optimization, and reset support.
-
----
-
-## Project Structure
-
-```
-sysaware-ml-optimizer/
-│
-├── core/
-│   ├── system_profiler.py    # Hardware detection via psutil + torch.cuda
-│   ├── model_analyzer.py     # Parameter count + model size (MB)
-│   ├── estimator.py          # Static estimation + micro-benchmark (5 passes)
-│   ├── optimizer.py          # INT8 quantization, FP16 conversion
-│   ├── strategy_engine.py    # IF/ELSE rule engine → optimization config
-│   ├── autotuner.py          # Try ≤3 configs, return best by goal
-│   └── prompt_optimizer.py   # Rule-based prompt rewriting + prompt quality scoring
-│
-├── gui/
-│   └── app.py                # Streamlit frontend (includes optional prompt optimizer)
-│
-├── main.py                   # CLI entry point
-├── tests/                    # Phase-based test suite
-├── requirements.txt
-├── .gitignore
-└── README.md
-```
-
----
-
-## Goals / Optimization Modes
-
-When running the tool, you select one of three goals:
-
-- **Low Latency** — Minimize inference time. Prefers FP16 on GPU, torch.compile where available.
-- **Low Memory** — Minimize RAM/VRAM footprint. Prefers INT8 quantization.
-- **Balanced** — Trade-off between speed and memory based on available headroom.
-
-The strategy engine uses **pure rule-based logic** (no ML, no heuristics beyond measured values) to pick the right config.
-
----
-
-## Optional Prompt Optimizer
-
-The GUI now includes a toggleable **Prompt Optimizer** feature.
-
-- Turn **Enable Prompt Optimizer** on/off from the GUI.
-- Paste any user prompt and choose a prompt type (`general`, `coding`, `analysis`, `creative`).
-- Click **Optimize Prompt** to get:
-  - a rewritten prompt with clearer structure,
-  - quality score before/after,
-  - practical suggestions for improving prompt quality.
-
-This feature is fully **rule-based** and runs locally.
-
----
-
-## Estimation Approach
-
-The estimator runs **two methods** and reports both:
-
-1. **Static Estimation** — Calculates memory floor from parameter count and dtype size. Fast, always available, lower confidence.
-2. **Micro Benchmark** — Runs 5 forward passes on a dummy input, measures average latency and peak memory. Higher confidence, requires a runnable model.
-
-All outputs are reported as **ranges** (e.g., `18ms – 24ms`), never false-precision single values.
-
----
-
-## What It Will NOT Do
-
-This is an MVP with hard scope limits:
-
-- No knowledge distillation
-- No structured or unstructured pruning beyond basic quantization
-- No ONNX export or runtime switching
-- No cloud/remote profiling
-- No ML-based decision making anywhere in the pipeline
-- No automatic dataset handling
-
----
-
-## Requirements
-
-- Python 3.9+
-- PyTorch 2.0+
-- A `.pt` or `.pth` PyTorch model file (local)
-
-```
-torch>=2.0.0
-psutil>=5.9.0
-streamlit>=1.32.0
-```
-
-## Quick Start on Windows
-
-```powershell
-cd D:\sysaware-ml-optimizer
-.\.venv-1\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-```
-
-If PowerShell blocks script execution, run:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-```
-
-Then activate the environment again.
-
----
+- **Security-First Model Loading**: Mitigates arbitrary code execution vulnerabilities during serialization by strictly enforcing `torch.load(..., weights_only=True)`. Legacy pickle-bound execution can only be instantiated with the explicit `--unsafe-load` flag.
+- **Dynamic Hardware Tiering**: Replaces hardcoded tier rules with algorithmic checks mapping model sizes against accessible memory ratios, robustly shifting between CPU, GPU, and Apple Silicon MPS domains.
+- **Comprehensive Benchmarking Mechanic**: Uses `tracemalloc` internally to measure actual intermediate tensors footprints seamlessly, cutting off benchmarks dynamically once inferences reach a tight coefficient of variance (CoV < 5%).
+- **Extended INT8 Quantization**: Automatically traverses nested layer blocks and dynamically compresses structural networks including `Conv1d`, `Conv2d`, `Conv3d`, `LSTM`, and `GRU` operations alongside standard `Linear` perceptrons.
+- **Intelligent Prompt Optimizer Engine**: A decoupled heuristic compiler that evaluates instruction prompts natively against `Task/Goal` dictionaries—targeting and recursively stripping semantic stop-words ("can you please", "I want you to") while restructuring the remaining text into formatted templates.
+- **Fault-Tolerant CLI Envelope**: Wraps critical execution hooks inside resilient exception blocks, delivering formatted JSON packets (HTTP 500 equivalent) on runtime failure for integration via Subprocess or CI wrappers.
+- **OctaWipe Streamlit Interface**: An optimized, cached, rapid user-interface eliminating stale state anomalies across continuous session executions.
 
 ## Installation
+
+Ensure you are running **Python 3.9+** and have PyTorch configured for your specific compute hardware.
 
 ```bash
 git clone https://github.com/gaminbhoot/sysaware-ml-optimizer.git
 cd sysaware-ml-optimizer
+
+# Recommended: Enable a virtual environment
 python -m venv venv
-source venv/bin/activate       # Windows: venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install requirements
 pip install -r requirements.txt
 ```
 
-On Windows with the included environment folder, use:
+## Quickstart (CLI)
 
-```powershell
-& .\.venv-1\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+SysAware exposes a centralized pipeline encompassing the entire workflow via `main.py`. 
+
+```bash
+# Run a memory-centric optimization path over a standard model
+python main.py --model-path ./models/resnet50.pt --goal memory
+
+# Return results strictly formatted as JSON (useful for backend pipelines)
+python main.py --model-path ./models/transformer.pth --goal balanced --json
+
+# Enable prompt optimization along with performance profiling
+python main.py --model-path ./models/bert.pt --goal performance \
+               --optimize-prompt \
+               --prompt-text "Please can you write a python script that summarizes this?" \
+               --prompt-type coding
 ```
 
----
+## Quickstart (GUI)
 
-## Running
+The interactive browser application is built natively on Streamlit.
 
-**Streamlit GUI (recommended):**
 ```bash
 streamlit run gui/app.py
 ```
 
-**CLI entry point:**
+## Developer Usage & Testing
+
+SysAware enforces comprehensive coverage paths spanning the `core`, `gui`, and `cli` boundaries.
+
 ```bash
-python main.py
+# Execute the full pytest regressions
+python -m pytest
+
+# Run isolated phases explicitly
+python -m pytest tests/test_optimizer.py
+python -m pytest tests/test_prompt_optimizer.py
 ```
-
-**CLI end-to-end usage:**
-```bash
-python main.py --model-path path\to\model.pt --goal balanced
-```
-
-**JSON output:**
-```bash
-python main.py --model-path path\to\model.pt --goal latency --json
-```
-
-**Optional prompt optimization:**
-```bash
-python main.py --model-path path\to\model.pt --optimize-prompt --prompt-text "rewrite this prompt" --prompt-type coding
-```
-
-**System profiler quick check:**
-```bash
-python -c "from core.system_profiler import get_system_profile; import json; print(json.dumps(get_system_profile(), indent=2))"
-```
-
-**Run the test suite:**
-```bash
-python -m pytest -q
-```
-
----
-
-## GUI Walkthrough
-
-The Streamlit app has six sections:
-
-1. **System Info** — Click *Analyze System* to read your hardware profile.
-2. **Model Input** — Provide the path to a local `.pt` / `.pth` model file.
-3. **Goal Selection** — Choose *Low Latency*, *Low Memory*, or *Balanced*.
-4. **Prompt Optimizer (Optional)** — Toggle on, optimize user prompts, and review rewrite + suggestions.
-5. **Run Optimization** — Single button executes the full model optimization pipeline.
-6. **Results** — Side-by-side before/after table: latency range, memory, speed delta, final recommendation string.
-
-The system profile section is the fastest place to verify the app is reading your local machine correctly.
-
----
-
-## Verification Notes
-
-The project includes phase-based tests for the code that is already implemented. As of now, the test suite covers:
-
-- Shared contracts and goal constants
-- Validation helpers and seed behavior
-- Logger behavior and handler reuse
-- CLI scaffold argument handling
-- CLI pipeline execution and output formatting
-- System profiling, including GPU and failure fallbacks
-- Model analysis, including module-like objects and mappings
-- Performance estimation, including static fallback and benchmark paths
-- Optimizer and strategy/autotune test coverage
-- Prompt optimizer behavior and edge cases
-- GUI helper and reset behavior
-- CLI end-to-end execution, JSON output, and prompt-optimizer gating
-
-Run the test suite after each phase change so regressions are caught early.
-
-The repository also includes a GitHub Actions workflow at [.github/workflows/ci.yml](.github/workflows/ci.yml) that installs dependencies and runs the test suite on push and pull request events.
-
----
-
-## Output Format (Example)
-
-```
-System: 8-core CPU | 16GB RAM | CUDA GPU (8GB VRAM) | Linux
-
-Model: ResNet-50 | 25.6M params | 97.8 MB
-
-Before:
-  Latency : 28ms – 36ms
-  Memory  : 94MB – 102MB
-
-After (FP16, goal=low_latency):
-  Latency : 14ms – 19ms   ↓ ~47%
-  Memory  : 47MB – 53MB   ↓ ~50%
-
-Recommendation: Use FP16 on GPU. Memory headroom is sufficient. Expected 2x throughput gain.
-```
-
----
-
-## Contributing to the project
-
-1. Fork the repo
-2. Create a feature branch (`git checkout -b feat/your-feature`)
-3. Commit with clear messages
-4. Open a pull request — describe what you changed and why
-
----
 
 ## License
 
-MIT License. See `LICENSE` for details.
+This project is licensed under the MIT License.
