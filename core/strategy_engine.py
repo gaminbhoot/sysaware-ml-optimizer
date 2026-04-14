@@ -1,1 +1,115 @@
-print("Just setting things up")
+from __future__ import annotations
+
+from typing import Any
+
+from .contracts import StrategyResult
+from .logging_utils import get_logger
+from .validation import validate_goal, require_fields, validate_non_negative_number
+
+
+logger = get_logger("sysaware.strategy_engine")
+
+
+def _profile_context(profile: dict[str, Any]) -> dict[str, str]:
+	gpu_available = bool(profile.get("gpu_available", False))
+	gpu_vram_gb = float(profile.get("gpu_vram_gb", 0.0))
+	ram_gb = float(profile.get("ram_gb", 0.0))
+
+	if gpu_available and gpu_vram_gb >= 8.0:
+		gpu_tier = "strong_gpu"
+	elif gpu_available and gpu_vram_gb >= 4.0:
+		gpu_tier = "modest_gpu"
+	elif gpu_available:
+		gpu_tier = "limited_gpu"
+	else:
+		gpu_tier = "cpu_only"
+
+	if ram_gb >= 16.0:
+		ram_tier = "plenty"
+	elif ram_gb >= 8.0:
+		ram_tier = "moderate"
+	else:
+		ram_tier = "constrained"
+
+	return {"gpu_tier": gpu_tier, "ram_tier": ram_tier}
+
+
+def _build_recommendation(goal: str, optimization: str, device: str, profile_note: str, efficiency_note: str) -> str:
+	goal_label = {
+		"latency": "low latency",
+		"memory": "low memory",
+		"balanced": "balanced",
+	}[goal]
+	return (
+		f"Goal: {goal_label}. Use {optimization.upper()} on {device}. "
+		f"{profile_note} {efficiency_note}"
+	).strip()
+
+
+def get_strategy(profile: dict[str, Any], goal: str) -> StrategyResult:
+	if not isinstance(profile, dict):
+		raise ValueError("Profile must be a dictionary")
+
+	goal_v = validate_goal(goal)
+	require_fields(profile, ["cpu_cores", "ram_gb", "gpu_available", "gpu_name", "gpu_vram_gb"], "system profile")
+
+	cpu_cores = int(validate_non_negative_number(profile["cpu_cores"], "cpu_cores"))
+	ram_gb = float(validate_non_negative_number(profile["ram_gb"], "ram_gb"))
+	gpu_available = bool(profile["gpu_available"])
+	gpu_name = str(profile.get("gpu_name", "None"))
+	gpu_vram_gb = float(validate_non_negative_number(profile["gpu_vram_gb"], "gpu_vram_gb"))
+
+	context = _profile_context(profile)
+	gpu_tier = context["gpu_tier"]
+	ram_tier = context["ram_tier"]
+
+	if goal_v == "memory":
+		optimization = "int8"
+		device = "cpu"
+		profile_note = "Memory pressure is the priority, so CPU INT8 quantization is the safest low-footprint path."
+		efficiency_note = "This keeps VRAM usage minimal and is robust on CPU-only machines."
+		if gpu_available and gpu_tier == "strong_gpu" and ram_tier == "plenty":
+			profile_note = (
+				f"{gpu_name} is available, but the memory goal favors minimizing footprint over throughput."
+			)
+	elif goal_v == "latency":
+		if gpu_available and gpu_tier in {"strong_gpu", "modest_gpu"} and ram_tier != "constrained":
+			optimization = "fp16"
+			device = "cuda"
+			profile_note = f"{gpu_name} has enough VRAM for faster half-precision inference."
+			efficiency_note = "FP16 should reduce latency without overcommitting memory on this machine."
+		else:
+			optimization = "int8"
+			device = "cpu"
+			profile_note = "The hardware profile does not justify a GPU-first latency path, so CPU INT8 is safer."
+			efficiency_note = "This keeps the recommendation deterministic and broadly compatible."
+	else:
+		if gpu_available and gpu_tier == "strong_gpu" and ram_tier != "constrained":
+			optimization = "fp16"
+			device = "cuda"
+			profile_note = f"{gpu_name} provides enough headroom for a balanced GPU-accelerated path."
+			efficiency_note = "FP16 offers a practical speed-up without pushing memory usage too hard."
+		elif gpu_available and gpu_tier == "modest_gpu" and ram_tier == "plenty":
+			optimization = "fp16"
+			device = "cuda"
+			profile_note = f"{gpu_name} can handle a balanced GPU path with moderate VRAM headroom."
+			efficiency_note = "The profile suggests the speed gain is worth the GPU cost."
+		else:
+			optimization = "int8"
+			device = "cpu"
+			profile_note = "A CPU INT8 path gives the most stable balance between memory usage and portability."
+			efficiency_note = "It avoids assuming enough GPU headroom for half-precision execution."
+
+	recommendation = _build_recommendation(goal_v, optimization, device, profile_note, efficiency_note)
+	rationale = (
+		f"Profile tier={gpu_tier}/{ram_tier}; cpu_cores={cpu_cores}; ram_gb={ram_gb:.1f}; gpu_vram_gb={gpu_vram_gb:.1f}."
+	)
+
+	result: StrategyResult = {
+		"optimization": optimization,
+		"device": device,
+		"rationale": rationale,
+		"recommendation": recommendation,
+	}
+	logger.info("Strategy selected: %s on %s for goal=%s", optimization, device, goal_v)
+	return result
