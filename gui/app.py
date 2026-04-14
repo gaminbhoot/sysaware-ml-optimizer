@@ -1,10 +1,11 @@
-import streamlit as st
+import streamlit as st  # type: ignore[import-not-found]
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from core.contracts import GOALS, GOAL_LABELS
+from gui.helpers import clear_pipeline_state, format_range, format_memory, format_gpu_name, has_required_inputs
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -235,19 +236,29 @@ col_left, col_mid, col_right = st.columns([1.1, 1.3, 1.6], gap="large")
 # ═══════════════════════════════════════════════════════════════════════════════
 with col_left:
 
+    if st.button("↺ Reset Session", key="btn_reset"):
+        clear_pipeline_state(st.session_state)
+        st.success("Session cleared.")
+        st.rerun()
+
     st.markdown('<div class="octa-section">01 / System Profile</div>', unsafe_allow_html=True)
 
     if st.button("▶  Analyze System", key="btn_system"):
         with st.spinner("Scanning hardware..."):
-            import sys, os
-            sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-            from core.system_profiler import get_system_profile
-            profile = get_system_profile()
-            st.session_state["system_profile"] = profile
+            try:
+                import sys, os
+                sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+                from core.system_profiler import get_system_profile
+
+                profile = get_system_profile()
+                st.session_state["system_profile"] = profile
+                st.success("System profile captured.")
+            except Exception as exc:
+                st.error(f"System scan failed: {exc}")
 
     if "system_profile" in st.session_state:
         p = st.session_state["system_profile"]
-        gpu_val   = p.get("gpu_name", "None")
+        gpu_val   = format_gpu_name(p.get("gpu_name", "None"))
         vram_val  = f"{p.get('gpu_vram_gb', 0):.1f} GB" if p.get("gpu_available") else "—"
         gpu_class = "octa-val-ok" if p.get("gpu_available") else "octa-val-bad"
         st.markdown(f"""
@@ -268,14 +279,16 @@ with col_left:
 
     if st.button("▶  Load Model", key="btn_load") and model_path:
         with st.spinner("Analyzing model..."):
-            import sys, os, torch
-            sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-            from core.model_analyzer import analyze_model
             try:
+                import sys, os, torch
+                sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+                from core.model_analyzer import analyze_model
+
                 model = torch.load(model_path, map_location="cpu")
                 analysis = analyze_model(model)
                 st.session_state["model"] = model
                 st.session_state["model_analysis"] = analysis
+                st.success("Model loaded and analyzed.")
             except Exception as e:
                 st.error(f"Load failed: {e}")
 
@@ -284,7 +297,7 @@ with col_left:
         st.markdown(f"""
         <div class="octa-card">
             <div class="octa-card-row"><span class="octa-key">Parameters</span><span class="octa-val">{a.get('num_params',0):,}</span></div>
-            <div class="octa-card-row"><span class="octa-key">Size</span><span class="octa-val">{a.get('size_mb',0):.2f} MB</span></div>
+            <div class="octa-card-row"><span class="octa-key">Size</span><span class="octa-val">{format_memory(a.get('size_mb',0))}</span></div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -351,7 +364,7 @@ with col_mid:
 
     st.markdown('<div class="octa-section">04 / Execute Pipeline</div>', unsafe_allow_html=True)
 
-    ready = "model" in st.session_state and "system_profile" in st.session_state
+    ready = has_required_inputs(st.session_state)
     if not ready:
         st.markdown('<div style="font-size:0.72rem;color:#2a2a2a;border:1px solid #1a1a1a;padding:0.8rem;font-family:\'Fira Code\',monospace;margin-bottom:1rem;">⚠ complete steps 01 and 02 first</div>', unsafe_allow_html=True)
 
@@ -362,22 +375,25 @@ with col_mid:
         from core.strategy_engine import get_strategy
         from core.autotuner       import autotune
 
-        model   = st.session_state["model"]
-        profile = st.session_state["system_profile"]
-        goal_v  = st.session_state["goal"]
+        try:
+            model   = st.session_state["model"]
+            profile = st.session_state["system_profile"]
+            goal_v  = st.session_state["goal"]
 
-        with st.spinner("Estimating baseline..."):
-            baseline = estimate_performance(model, profile)
-            st.session_state["baseline"] = baseline
-        with st.spinner("Generating strategy..."):
-            strategy = get_strategy(profile, goal_v)
-            st.session_state["strategy"] = strategy
-        with st.spinner("Autotuning configs..."):
-            best_config, best_model, best_result = autotune(model, profile, goal_v)
-            st.session_state["best_config"] = best_config
-            st.session_state["best_model"]  = best_model
-            st.session_state["best_result"] = best_result
-        st.success("Pipeline complete.")
+            with st.spinner("Estimating baseline..."):
+                baseline = estimate_performance(model, profile)
+                st.session_state["baseline"] = baseline
+            with st.spinner("Generating strategy..."):
+                strategy = get_strategy(profile, goal_v)
+                st.session_state["strategy"] = strategy
+            with st.spinner("Autotuning configs..."):
+                best_config, best_model, best_result = autotune(model, profile, goal_v)
+                st.session_state["best_config"] = best_config
+                st.session_state["best_model"]  = best_model
+                st.session_state["best_result"] = best_result
+            st.success("Pipeline complete.")
+        except Exception as exc:
+            st.error(f"Optimization pipeline failed: {exc}")
 
     if "strategy" in st.session_state:
         s = st.session_state["strategy"]
@@ -414,8 +430,8 @@ with col_right:
 
         st.markdown(f"""
         <div class="octa-stat-grid">
-            <div class="octa-stat"><span class="octa-stat-val">{lat_b_lo:.0f}–{lat_b_hi:.0f}</span><span class="octa-stat-label">Before Latency (ms)</span></div>
-            <div class="octa-stat"><span class="octa-stat-val">{lat_r_lo:.0f}–{lat_r_hi:.0f}</span><span class="octa-stat-label">After Latency (ms)</span></div>
+            <div class="octa-stat"><span class="octa-stat-val">{format_range((lat_b_lo, lat_b_hi)).replace('ms', '')}</span><span class="octa-stat-label">Before Latency (ms)</span></div>
+            <div class="octa-stat"><span class="octa-stat-val">{format_range((lat_r_lo, lat_r_hi)).replace('ms', '')}</span><span class="octa-stat-label">After Latency (ms)</span></div>
             <div class="octa-stat"><span class="octa-stat-val">{mem_b:.0f}</span><span class="octa-stat-label">Before Mem (MB)</span></div>
             <div class="octa-stat"><span class="octa-stat-val">{mem_r:.0f}</span><span class="octa-stat-label">After Mem (MB)</span></div>
         </div>
