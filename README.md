@@ -4,6 +4,7 @@
 
 ---
 
+
 ## What It Does
 
 Most ML optimization tools assume a fixed environment. This tool doesn't. It reads *your* machine first — CPU cores, RAM, GPU availability, VRAM — and uses that context to decide what optimizations actually make sense for *your* setup.
@@ -117,7 +118,7 @@ streamlit>=1.32.0
 ## Installation
 
 ```bash
-git clone https://github.com/your-username/sysaware-ml-optimizer.git
+git clone https://github.com/gaminbhoot/sysaware-ml-optimizer.git
 cd sysaware-ml-optimizer
 python -m venv venv
 source venv/bin/activate       # Windows: venv\Scripts\activate
@@ -173,7 +174,7 @@ Recommendation: Use FP16 on GPU. Memory headroom is sufficient. Expected 2x thro
 
 ---
 
-## Contributing
+## Contributing to the project
 
 1. Fork the repo
 2. Create a feature branch (`git checkout -b feat/your-feature`)
