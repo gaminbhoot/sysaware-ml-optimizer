@@ -71,6 +71,14 @@ def build_suggestions(prompt: str) -> List[str]:
     return suggestions
 
 
+import re
+
+def _remove_filler_words(text: str) -> str:
+    # A simple regex to strip common filler words at the start or embedded smoothly
+    filler_pattern = r"(?i)^(please\s+can\s+you\s+|can\s+you\s+|please\s+|could\s+you\s+|i\s+want\s+you\s+to\s+|kindly\s+)|(\s+(please|kindly)\s+)"
+    cleaned = re.sub(filler_pattern, " ", text).strip()
+    return cleaned
+
 def optimize_prompt(user_prompt: str, intent: str = "general") -> Dict[str, object]:
     normalized = _normalize_spaces(user_prompt)
     if not normalized:
@@ -81,13 +89,16 @@ def optimize_prompt(user_prompt: str, intent: str = "general") -> Dict[str, obje
             "before_score": 0,
             "after_score": 0,
         }
+    
+    cleaned_prompt = _remove_filler_words(normalized)
+    cleaned_prompt = _normalize_spaces(cleaned_prompt)
 
     intent_key = intent if intent in INTENT_HINTS else "general"
     before_score = score_prompt(normalized)
-    suggestions = build_suggestions(normalized)
+    suggestions = build_suggestions(cleaned_prompt)
 
     optimized = (
-        f"Task: {normalized}\n"
+        f"Task: {cleaned_prompt}\n"
         f"Goal: {INTENT_HINTS[intent_key]}.\n"
         "Context: Include relevant project background, target audience, and assumptions.\n"
         "Constraints: Keep the response focused, avoid filler, and call out uncertainty when needed.\n"

@@ -5,6 +5,14 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from core.contracts import GOALS, GOAL_LABELS
+from core.system_profiler import get_system_profile
+from core.model_analyzer import analyze_model
+from core.prompt_optimizer import optimize_prompt
+from core.estimator import estimate_performance
+from core.strategy_engine import get_strategy
+from core.autotuner import autotune
+import torch
+
 from gui.helpers import clear_pipeline_state, format_range, format_memory, format_gpu_name, has_required_inputs
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -246,10 +254,6 @@ with col_left:
     if st.button("▶  Analyze System", key="btn_system"):
         with st.spinner("Scanning hardware..."):
             try:
-                import sys, os
-                sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-                from core.system_profiler import get_system_profile
-
                 profile = get_system_profile()
                 st.session_state["system_profile"] = profile
                 st.success("System profile captured.")
@@ -275,16 +279,18 @@ with col_left:
 
     st.markdown('<div class="octa-section">02 / Model Input</div>', unsafe_allow_html=True)
 
-    model_path = st.text_input("Model path (.pt / .pth)", placeholder="e.g. /models/resnet50.pt")
+    def on_model_path_change():
+        if "model_analysis" in st.session_state:
+            del st.session_state["model_analysis"]
+        if "model" in st.session_state:
+            del st.session_state["model"]
+
+    model_path = st.text_input("Model path (.pt / .pth)", placeholder="e.g. /models/resnet50.pt", on_change=on_model_path_change)
 
     if st.button("▶  Load Model", key="btn_load") and model_path:
         with st.spinner("Analyzing model..."):
             try:
-                import sys, os, torch
-                sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-                from core.model_analyzer import analyze_model
-
-                model = torch.load(model_path, map_location="cpu")
+                model = torch.load(model_path, map_location="cpu", weights_only=True)
                 analysis = analyze_model(model)
                 st.session_state["model"] = model
                 st.session_state["model_analysis"] = analysis
@@ -339,10 +345,6 @@ with col_mid:
         )
 
         if st.button("▶  Optimize Prompt", key="btn_optimize_prompt"):
-            import sys, os
-            sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-            from core.prompt_optimizer import optimize_prompt
-
             result = optimize_prompt(user_prompt_input, prompt_intent)
             st.session_state["prompt_optimizer_result"] = result
 
@@ -369,12 +371,6 @@ with col_mid:
         st.markdown('<div style="font-size:0.72rem;color:#2a2a2a;border:1px solid #1a1a1a;padding:0.8rem;font-family:\'Fira Code\',monospace;margin-bottom:1rem;">⚠ complete steps 01 and 02 first</div>', unsafe_allow_html=True)
 
     if st.button("▶▶  Run Optimization", key="btn_run", disabled=not ready):
-        import sys, os
-        sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-        from core.estimator       import estimate_performance
-        from core.strategy_engine import get_strategy
-        from core.autotuner       import autotune
-
         try:
             model   = st.session_state["model"]
             profile = st.session_state["system_profile"]

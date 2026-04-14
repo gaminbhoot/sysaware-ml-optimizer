@@ -75,15 +75,22 @@ def apply_int8_quantization(model: Any) -> tuple[Any, dict[str, Any]]:
 		return model, _base_metadata("int8", "cpu", False, ["Torch quantization is unavailable"])
 
 	quantize_dynamic = getattr(torch.quantization, "quantize_dynamic", None)
-	linear_layer = getattr(getattr(torch, "nn", None), "Linear", None)
 	qint8 = getattr(torch, "qint8", None)
+	nn = getattr(torch, "nn", None)
+	
+	quantizable_modules = set()
+	if nn is not None:
+		for layer_name in ["Linear", "Conv1d", "Conv2d", "Conv3d", "LSTM", "GRU"]:
+			layer = getattr(nn, layer_name, None)
+			if layer is not None:
+				quantizable_modules.add(layer)
 
-	if quantize_dynamic is None or linear_layer is None or qint8 is None:
+	if not quantizable_modules or quantize_dynamic is None or qint8 is None:
 		return model, _base_metadata("int8", "cpu", False, ["Torch quantization prerequisites are unavailable"])
 
 	target = _clone_model(model)
 	try:
-		optimized = quantize_dynamic(target, {linear_layer}, dtype=qint8)
+		optimized = quantize_dynamic(target, quantizable_modules, dtype=qint8)
 		return optimized, _base_metadata("int8", "cpu", True, [])
 	except Exception as exc:
 		logger.warning("INT8 quantization failed: %s", exc)

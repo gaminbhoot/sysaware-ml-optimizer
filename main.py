@@ -177,6 +177,8 @@ def main(argv: list[str] | None = None) -> int:
 		report = run_pipeline(args)
 	except (ValidationError, FileNotFoundError, RuntimeError, ValueError) as exc:
 		logger.error(str(exc))
+		if getattr(args, "json", False):
+			print(json.dumps({"status": "error", "message": str(exc), "code": 500}))
 		return 2
 
 	if args.json:
