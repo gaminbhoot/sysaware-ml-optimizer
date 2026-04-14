@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import statistics
 import time
+import tracemalloc
 from typing import Any
 
 from .contracts import PerformanceEstimate
@@ -84,30 +85,80 @@ def _run_micro_benchmark(model: Any, profile: dict[str, Any]) -> tuple[tuple[flo
 	if not hasattr(model, "eval") or not callable(getattr(model, "eval")):
 		raise RuntimeError("Model does not support evaluation mode")
 
-	device = torch.device("cuda" if profile.get("gpu_available") and torch.cuda.is_available() else "cpu")
+	device_name = "cpu"
+	if profile.get("gpu_available"):
+		if hasattr(torch, "cuda") and torch.cuda.is_available():
+			device_name = "cuda"
+		elif hasattr(getattr(torch, "backends", None), "mps") and getattr(torch.backends, "mps").is_available():
+			device_name = "mps"
+	device = torch.device(device_name)
+
 	input_tensor = _build_dummy_input(_get_batch_size(profile))
 	if input_tensor is None:
 		raise RuntimeError("Unable to build dummy input")
 
 	model.eval()
-	model = model.to(device) if hasattr(model, "to") else model
-	input_tensor = input_tensor.to(device)
+	try:
+		if hasattr(model, "to"):
+			model = model.to(device)
+	except Exception:
+		pass
+	try:
+		if hasattr(input_tensor, "to"):
+			input_tensor = input_tensor.to(device)
+	except Exception:
+		pass
 
 	durations: list[float] = []
-	if device.type == "cuda":
-		torch.cuda.reset_peak_memory_stats(device)
+	is_cuda = (device.type == "cuda")
+	peak_tracemalloc_bytes_val = 0.0
+
+	if is_cuda:
+		try: torch.cuda.reset_peak_memory_stats(device)
+		except Exception: pass
+	elif device.type == "cpu":
+		if not tracemalloc.is_tracing():
+			tracemalloc.start()
 
 	with torch.no_grad():
-		for _ in range(2):
+		# Warmup
+		warmup_start = time.perf_counter()
+		while time.perf_counter() - warmup_start < 0.1:
 			model(input_tensor)
-		for _ in range(5):
-			if device.type == "cuda":
-				torch.cuda.synchronize(device)
+
+		# Dynamic Benchmark Loop
+		start_benchmark = time.perf_counter()
+		max_duration = 1.0  # 1.0 second fixed duration threshold
+		
+		while True:
+			if is_cuda:
+				try: torch.cuda.synchronize(device)
+				except Exception: pass
+				
 			start = time.perf_counter()
 			model(input_tensor)
-			if device.type == "cuda":
-				torch.cuda.synchronize(device)
+			
+			if is_cuda:
+				try: torch.cuda.synchronize(device)
+				except Exception: pass
+				
 			durations.append((time.perf_counter() - start) * 1000.0)
+
+			if time.perf_counter() - start_benchmark >= max_duration:
+				break
+				
+			if len(durations) >= 5:
+				last_3 = durations[-3:]
+				mean_val = statistics.mean(last_3)
+				if mean_val > 0:
+					variance_pct = (max(last_3) - min(last_3)) / mean_val
+					if variance_pct < 0.05:  # variance stabilized under 5% over last 3 epochs
+						break
+
+	if device.type == "cpu" and tracemalloc.is_tracing():
+		_, peak_tracemalloc = tracemalloc.get_traced_memory()
+		tracemalloc.stop()
+		peak_tracemalloc_bytes_val = float(peak_tracemalloc)
 
 	if not durations:
 		raise RuntimeError("No benchmark timings collected")
@@ -115,11 +166,14 @@ def _run_micro_benchmark(model: Any, profile: dict[str, Any]) -> tuple[tuple[flo
 	latency_low = min(durations)
 	latency_high = max(durations)
 
-	if device.type == "cuda":
-		peak_bytes = float(torch.cuda.max_memory_allocated(device))
-		memory_mb = peak_bytes / (1024 ** 2)
+	if is_cuda:
+		try:
+			peak_bytes = float(torch.cuda.max_memory_allocated(device))
+			memory_mb = peak_bytes / (1024 ** 2)
+		except Exception:
+			memory_mb = _estimate_static_memory_mb(model)
 	else:
-		memory_mb = _estimate_static_memory_mb(model)
+		memory_mb = _estimate_static_memory_mb(model) + (peak_tracemalloc_bytes_val / (1024 ** 2))
 
 	confidence = "high" if len(durations) >= 5 else "medium"
 	return (latency_low, latency_high), memory_mb, confidence
