@@ -272,6 +272,11 @@ with col_left:
         igpu_gb   = p.get("igpu_vram_gb", 0.0)
         igpu_val  = f"{format_gpu_name(igpu_name)} ({igpu_gb:.1f} GB)" if igpu_name != "None" else "None"
         igpu_class = "octa-val-ok" if igpu_name != "None" else "octa-val-bad"
+
+        npu_avail = p.get("npu_available", False)
+        npu_name  = p.get("npu_name", "None")
+        npu_val   = npu_name if npu_avail else "Not Detected"
+        npu_class = "octa-val-ok" if npu_avail else "octa-val-bad"
         
         st.markdown(f"""
         <div class="octa-card">
@@ -280,6 +285,7 @@ with col_left:
             <div class="octa-card-row"><span class="octa-key">RAM</span><span class="octa-val">{p.get('ram_gb',0):.1f} GB</span></div>
             <div class="octa-card-row"><span class="octa-key">dGPU</span><span class="{dgpu_class}">{dgpu_val}</span></div>
             <div class="octa-card-row"><span class="octa-key">iGPU</span><span class="{igpu_class}">{igpu_val}</span></div>
+            <div class="octa-card-row"><span class="octa-key">NPU</span><span class="{npu_class}">{npu_val}</span></div>
         </div>
         """, unsafe_allow_html=True)
     else:

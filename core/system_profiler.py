@@ -35,6 +35,8 @@ def get_system_profile() -> SystemProfile:
 		"dgpu_vram_gb": 0.0,
 		"igpu_name": "None",
 		"igpu_vram_gb": 0.0,
+		"npu_available": False,
+		"npu_name": "None",
 	}
 
 	try:
@@ -127,5 +129,34 @@ def get_system_profile() -> SystemProfile:
 								break
 		except Exception as exc:
 			logger.warning("iGPU fallback detection failed: %s", exc)
+
+	try:
+		import subprocess
+		import re
+		sys_os = platform.system()
+		if sys_os == "Windows":
+			output = subprocess.check_output("wmic path Win32_PnPEntity get Name", shell=True, text=True, stderr=subprocess.DEVNULL)
+			for line in output.split("\n"):
+				line = line.strip()
+				if line and (re.search(r'\bnpu\b', line.lower()) or "neural" in line.lower() or "ai accelerator" in line.lower()):
+					profile["npu_available"] = True
+					profile["npu_name"] = line
+					break
+		elif sys_os == "Linux":
+			# check lspci for NPU or accelerators
+			output = subprocess.check_output("lspci", shell=True, text=True, stderr=subprocess.DEVNULL)
+			for line in output.split("\n"):
+				if line and (re.search(r'\bnpu\b', line.lower()) or "neural" in line.lower() or "ai accelerator" in line.lower()):
+					parts = line.split(": ")
+					if len(parts) > 1:
+						profile["npu_available"] = True
+						profile["npu_name"] = parts[-1].strip()
+						break
+		elif sys_os == "Darwin":
+			if platform.machine() == "arm64":
+				profile["npu_available"] = True
+				profile["npu_name"] = "Apple Neural Engine"
+	except Exception as exc:
+		logger.warning("NPU detection failed: %s", exc)
 
 	return profile

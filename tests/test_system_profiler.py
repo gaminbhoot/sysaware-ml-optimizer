@@ -30,6 +30,8 @@ def test_get_system_profile_has_expected_keys(reset_profiler_deps: None) -> None
         "dgpu_vram_gb",
         "igpu_name",
         "igpu_vram_gb",
+        "npu_available",
+        "npu_name",
     }
 
 

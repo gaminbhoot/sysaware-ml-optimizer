@@ -23,6 +23,8 @@ class SystemProfile(TypedDict):
     dgpu_vram_gb: float
     igpu_name: str
     igpu_vram_gb: float
+    npu_available: bool
+    npu_name: str
 
 
 class ModelAnalysis(TypedDict):
