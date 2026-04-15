@@ -262,16 +262,24 @@ with col_left:
 
     if "system_profile" in st.session_state:
         p = st.session_state["system_profile"]
-        gpu_val   = format_gpu_name(p.get("gpu_name", "None"))
-        vram_val  = f"{p.get('gpu_vram_gb', 0):.1f} GB" if p.get("gpu_available") else "—"
-        gpu_class = "octa-val-ok" if p.get("gpu_available") else "octa-val-bad"
+        
+        dgpu_name = p.get("dgpu_name", "None")
+        dgpu_gb   = p.get("dgpu_vram_gb", 0.0)
+        dgpu_val  = f"{format_gpu_name(dgpu_name)} ({dgpu_gb:.1f} GB)" if dgpu_name != "None" else "None"
+        dgpu_class = "octa-val-ok" if dgpu_name != "None" else "octa-val-bad"
+
+        igpu_name = p.get("igpu_name", "None")
+        igpu_gb   = p.get("igpu_vram_gb", 0.0)
+        igpu_val  = f"{format_gpu_name(igpu_name)} ({igpu_gb:.1f} GB)" if igpu_name != "None" else "None"
+        igpu_class = "octa-val-ok" if igpu_name != "None" else "octa-val-bad"
+        
         st.markdown(f"""
         <div class="octa-card">
             <div class="octa-card-row"><span class="octa-key">OS</span><span class="octa-val">{p.get('os','—')}</span></div>
             <div class="octa-card-row"><span class="octa-key">CPU Cores</span><span class="octa-val">{p.get('cpu_cores','—')}</span></div>
             <div class="octa-card-row"><span class="octa-key">RAM</span><span class="octa-val">{p.get('ram_gb',0):.1f} GB</span></div>
-            <div class="octa-card-row"><span class="octa-key">GPU</span><span class="{gpu_class}">{gpu_val}</span></div>
-            <div class="octa-card-row"><span class="octa-key">VRAM</span><span class="{gpu_class}">{vram_val}</span></div>
+            <div class="octa-card-row"><span class="octa-key">dGPU</span><span class="{dgpu_class}">{dgpu_val}</span></div>
+            <div class="octa-card-row"><span class="octa-key">iGPU</span><span class="{igpu_class}">{igpu_val}</span></div>
         </div>
         """, unsafe_allow_html=True)
     else:
