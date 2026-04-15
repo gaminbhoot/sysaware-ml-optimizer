@@ -117,7 +117,10 @@ def print_human_report(report: dict[str, Any]) -> None:
 	best_config = report["best_config"]
 	strategy = report["strategy"]
 
-	print(f"System: {system.get('cpu_cores', '—')} CPU cores | {system.get('ram_gb', 0):.1f} GB RAM | {system.get('gpu_name', 'None')} | {system.get('os', 'Unknown')}")
+	print(f"System: {system.get('cpu_cores', '—')} CPU cores | {system.get('ram_gb', 0):.1f} GB RAM | {system.get('os', 'Unknown')}")
+	dgpu_name = system.get('dgpu_name', 'None')
+	igpu_name = system.get('igpu_name', 'None')
+	print(f"  dGPU: {dgpu_name} ({system.get('dgpu_vram_gb', 0.0):.2f} GB) | iGPU: {igpu_name} ({system.get('igpu_vram_gb', 0.0):.2f} GB)")
 	print(f"Model: {model.get('model_name', 'Unknown')} | {model.get('num_params', 0):,} params | {model.get('size_mb', 0.0):.2f} MB")
 	print("\nBefore:")
 	print(f"  Latency : {baseline.get('latency_range_ms', (0.0, 0.0))[0]:.2f}ms – {baseline.get('latency_range_ms', (0.0, 0.0))[1]:.2f}ms")

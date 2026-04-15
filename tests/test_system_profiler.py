@@ -9,6 +9,11 @@ import core.system_profiler as sp
 def reset_profiler_deps(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sp, "psutil", None)
     monkeypatch.setattr(sp, "torch", None)
+    
+    import subprocess
+    def fake_check_output(*args, **kwargs):
+        raise OSError("Mocked subprocess failure")
+    monkeypatch.setattr(subprocess, "check_output", fake_check_output)
 
 
 def test_get_system_profile_has_expected_keys(reset_profiler_deps: None) -> None:
@@ -21,6 +26,10 @@ def test_get_system_profile_has_expected_keys(reset_profiler_deps: None) -> None
         "gpu_available",
         "gpu_name",
         "gpu_vram_gb",
+        "dgpu_name",
+        "dgpu_vram_gb",
+        "igpu_name",
+        "igpu_vram_gb",
     }
 
 

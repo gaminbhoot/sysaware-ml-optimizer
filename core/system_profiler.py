@@ -31,6 +31,10 @@ def get_system_profile() -> SystemProfile:
 		"gpu_available": False,
 		"gpu_name": "None",
 		"gpu_vram_gb": 0.0,
+		"dgpu_name": "None",
+		"dgpu_vram_gb": 0.0,
+		"igpu_name": "None",
+		"igpu_vram_gb": 0.0,
 	}
 
 	try:
@@ -78,14 +82,50 @@ def get_system_profile() -> SystemProfile:
 			profile["gpu_available"] = True
 			profile["gpu_name"] = getattr(props, "name", "Unknown GPU") or "Unknown GPU"
 			profile["gpu_vram_gb"] = max(_bytes_to_gb(float(getattr(props, "total_memory", 0.0))), 0.0)
+			profile["dgpu_name"] = profile["gpu_name"]
+			profile["dgpu_vram_gb"] = profile["gpu_vram_gb"]
 			
 		elif mps is not None and bool(mps.is_available()):
 			profile["gpu_available"] = True
 			profile["gpu_name"] = "Apple Silicon MPS"
 			# Apple Silicon uses unified memory; safely report the available system RAM as VRAM
 			profile["gpu_vram_gb"] = profile.get("ram_available_gb", profile["ram_gb"])
+			profile["dgpu_name"] = profile["gpu_name"]
+			profile["dgpu_vram_gb"] = profile["gpu_vram_gb"]
 
 	except Exception as exc:
 		logger.warning("GPU detection failed: %s", exc)
+
+	if not profile.get("gpu_available"):
+		try:
+			import subprocess
+			sys_os = platform.system()
+			if sys_os == "Windows":
+				output = subprocess.check_output("wmic path win32_VideoController get name", shell=True, text=True, stderr=subprocess.DEVNULL)
+				for line in output.split("\n"):
+					line = line.strip()
+					if line and line.lower() != "name" and "virtual" not in line.lower() and "basic" not in line.lower():
+						profile["gpu_available"] = True
+						profile["gpu_name"] = line
+						profile["gpu_vram_gb"] = profile.get("ram_available_gb", profile["ram_gb"]) / 2.0
+						profile["igpu_name"] = profile["gpu_name"]
+						profile["igpu_vram_gb"] = profile["gpu_vram_gb"]
+						break
+			elif sys_os == "Linux":
+				output = subprocess.check_output("lspci | grep -i vga", shell=True, text=True, stderr=subprocess.DEVNULL)
+				for line in output.split("\n"):
+					if line:
+						parts = line.split(": ")
+						if len(parts) > 1:
+							name = parts[1].split("(rev")[0].strip()
+							if "virtual" not in name.lower() and "vmware" not in name.lower():
+								profile["gpu_available"] = True
+								profile["gpu_name"] = name
+								profile["gpu_vram_gb"] = profile.get("ram_available_gb", profile["ram_gb"]) / 2.0
+								profile["igpu_name"] = profile["gpu_name"]
+								profile["igpu_vram_gb"] = profile["gpu_vram_gb"]
+								break
+		except Exception as exc:
+			logger.warning("iGPU fallback detection failed: %s", exc)
 
 	return profile

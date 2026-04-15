@@ -19,6 +19,10 @@ class SystemProfile(TypedDict):
     gpu_available: bool
     gpu_name: str
     gpu_vram_gb: float
+    dgpu_name: str
+    dgpu_vram_gb: float
+    igpu_name: str
+    igpu_vram_gb: float
 
 
 class ModelAnalysis(TypedDict):
