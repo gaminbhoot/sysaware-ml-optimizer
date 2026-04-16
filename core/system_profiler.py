@@ -23,6 +23,31 @@ def _bytes_to_gb(value: float) -> float:
 	return round(value / (1024 ** 3), 2)
 
 
+def _probe_apple_neural_engine() -> tuple[bool, str]:
+	"""Return explicit ANE detection result on macOS.
+
+	This intentionally avoids platform assumptions (for example, arm64 => ANE).
+	A positive result is only returned when OS-level probes expose ANE signals.
+	"""
+	try:
+		import subprocess
+
+		# Prefer IORegistry signals because they expose device/driver entries.
+		probes: list[tuple[str, str]] = [
+			("ioreg -r -n AppleANE -l", "Apple Neural Engine"),
+			("ioreg -l", "AppleANE"),
+		]
+
+		for cmd, name in probes:
+			output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL)
+			if "appleane" in output.lower() or "neural engine" in output.lower():
+				return True, name
+	except Exception:
+		return False, "None"
+
+	return False, "None"
+
+
 def get_system_profile() -> SystemProfile:
 	profile: SystemProfile = {
 		"os": "Unknown",
@@ -153,9 +178,9 @@ def get_system_profile() -> SystemProfile:
 						profile["npu_name"] = parts[-1].strip()
 						break
 		elif sys_os == "Darwin":
-			if platform.machine() == "arm64":
-				profile["npu_available"] = True
-				profile["npu_name"] = "Apple Neural Engine"
+			npu_available, npu_name = _probe_apple_neural_engine()
+			profile["npu_available"] = npu_available
+			profile["npu_name"] = npu_name
 	except Exception as exc:
 		logger.warning("NPU detection failed: %s", exc)
 

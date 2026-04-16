@@ -179,3 +179,37 @@ def test_system_profiler_mps(reset_profiler_deps: None, monkeypatch: pytest.Monk
     assert profile["gpu_name"] == "Apple Silicon MPS"
     assert profile["gpu_vram_gb"] == 10.0
     assert profile["ram_gb"] == 16.0
+
+
+def test_darwin_npu_detection_requires_explicit_probe(reset_profiler_deps: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sp.platform, "system", lambda: "Darwin")
+
+    import subprocess
+
+    def fake_check_output(cmd: str, *args, **kwargs):
+        if "ioreg" in cmd:
+            return "+-o AppleANE  <class AppleANE, id 0x100000>"
+        raise OSError("unexpected command")
+
+    monkeypatch.setattr(subprocess, "check_output", fake_check_output)
+
+    profile = sp.get_system_profile()
+    assert profile["npu_available"] is True
+    assert profile["npu_name"] == "Apple Neural Engine"
+
+
+def test_darwin_npu_detection_no_probe_hit(reset_profiler_deps: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sp.platform, "system", lambda: "Darwin")
+
+    import subprocess
+
+    def fake_check_output(cmd: str, *args, **kwargs):
+        if "ioreg" in cmd:
+            return "no ane signal"
+        raise OSError("unexpected command")
+
+    monkeypatch.setattr(subprocess, "check_output", fake_check_output)
+
+    profile = sp.get_system_profile()
+    assert profile["npu_available"] is False
+    assert profile["npu_name"] == "None"
