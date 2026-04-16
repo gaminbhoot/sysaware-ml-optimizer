@@ -145,3 +145,17 @@ def test_get_strategy_falls_back_to_cpu_for_constrained_gpu_profile() -> None:
     result = get_strategy(profile, "latency")
     assert result["optimization"] == "int8"
     assert result["device"] == "cpu"
+
+
+def test_get_strategy_uses_mps_backend_when_available() -> None:
+    profile = {
+        "cpu_cores": 8,
+        "ram_gb": 16.0,
+        "gpu_available": True,
+        "gpu_backend": "mps",
+        "gpu_name": "Apple Silicon MPS",
+        "gpu_vram_gb": 12.0,
+    }
+    result = get_strategy(profile, "latency")
+    assert result["optimization"] == "fp16"
+    assert result["device"] == "mps"

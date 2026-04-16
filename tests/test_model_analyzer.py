@@ -73,13 +73,16 @@ def test_analyze_model_counts_and_size_for_module_like_objects(
         ({"a": FakeTensor(7, 1, requires_grad=False)}, 7, 7 / (1024 ** 2)),
     ],
 )
-def test_analyze_model_rejects_tensor_mappings(
+def test_analyze_model_supports_tensor_mappings(
     state_dict: dict[str, FakeTensor],
     expected_params: int,
     expected_size: float,
 ) -> None:
-    with pytest.raises(NotImplementedError, match="Analyzing state dictionaries directly is not supported"):
-        analyze_model(state_dict)
+    analysis = analyze_model(state_dict)
+    assert analysis["model_name"] in {"dict", "OrderedDict"}
+    assert analysis["num_params"] == expected_params
+    assert analysis["trainable_params"] == 0
+    assert analysis["size_mb"] == pytest.approx(expected_size, rel=1e-6)
 
 
 @pytest.mark.parametrize(
@@ -110,13 +113,15 @@ def test_analyze_model_handles_model_with_no_parameters() -> None:
 
 
 def test_analyze_model_ignores_non_tensor_values_in_mapping() -> None:
-    with pytest.raises(NotImplementedError, match="Analyzing state dictionaries directly is not supported"):
-        analyze_model({"good": FakeTensor(5, 4), "bad": "skip me"})
+    analysis = analyze_model({"good": FakeTensor(5, 4), "bad": "skip me"})
+    assert analysis["num_params"] == 5
+    assert analysis["size_mb"] == pytest.approx(20 / (1024 ** 2), rel=1e-6)
 
 
 def test_analyze_model_rejects_tuple_collections() -> None:
-    with pytest.raises(NotImplementedError, match="Analyzing unstructured collections of tensors is not supported"):
-        analyze_model((FakeTensor(2, 4), FakeTensor(3, 2, requires_grad=False)))
+    analysis = analyze_model((FakeTensor(2, 4), FakeTensor(3, 2, requires_grad=False)))
+    assert analysis["num_params"] == 5
+    assert analysis["size_mb"] == pytest.approx((8 + 6) / (1024 ** 2), rel=1e-6)
 
 
 def test_analyze_model_preserves_small_size_precision() -> None:

@@ -82,7 +82,13 @@ def load_model_from_path(model_path: str, unsafe_load: bool = False) -> Any:
 	try:
 		return torch.load(str(path), map_location="cpu", weights_only=not unsafe_load)
 	except Exception as exc:
-		raise RuntimeError(f"Failed to load model '{model_path}': {exc}") from exc
+		if unsafe_load:
+			raise RuntimeError(f"Failed to load model '{model_path}' with unsafe_load enabled: {exc}") from exc
+		raise RuntimeError(
+			f"Failed to load model '{model_path}' with weights_only=True: {exc}. "
+			"If this is a full-module checkpoint, retry with --unsafe-load or use the GUI unsafe-load option. "
+			"If it is a state_dict, the checkpoint can still be analyzed, but optimization requires a torch.nn.Module."
+		) from exc
 
 
 def build_report(

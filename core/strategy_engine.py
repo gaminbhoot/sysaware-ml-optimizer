@@ -65,6 +65,9 @@ def get_strategy(profile: dict[str, Any], goal: str, model_analysis: dict[str, A
 	gpu_available = bool(profile["gpu_available"])
 	gpu_name = str(profile.get("gpu_name", "None"))
 	gpu_vram_gb = float(validate_non_negative_number(profile["gpu_vram_gb"], "gpu_vram_gb"))
+	gpu_backend = str(profile.get("gpu_backend", "cuda" if gpu_available else "cpu")).lower()
+	supported_gpu_backend = gpu_backend in {"cuda", "mps"}
+	device_name = gpu_backend if supported_gpu_backend else "cpu"
 
 	context = _profile_context(profile, model_analysis)
 	gpu_tier = context["gpu_tier"]
@@ -80,10 +83,10 @@ def get_strategy(profile: dict[str, Any], goal: str, model_analysis: dict[str, A
 				f"{gpu_name} is available, but the memory goal favors minimizing footprint over throughput."
 			)
 	elif goal_v == "latency":
-		if gpu_available and gpu_tier in {"strong_gpu", "modest_gpu"} and ram_tier != "constrained":
+		if gpu_available and supported_gpu_backend and gpu_tier in {"strong_gpu", "modest_gpu"} and ram_tier != "constrained":
 			optimization = "fp16"
-			device = "cuda"
-			profile_note = f"{gpu_name} has enough VRAM for faster half-precision inference."
+			device = device_name
+			profile_note = f"{gpu_name} has enough VRAM for faster half-precision inference on {device_name.upper()}."
 			efficiency_note = "FP16 should reduce latency without overcommitting memory on this machine."
 		else:
 			optimization = "int8"
@@ -91,15 +94,15 @@ def get_strategy(profile: dict[str, Any], goal: str, model_analysis: dict[str, A
 			profile_note = "The hardware profile does not justify a GPU-first latency path, so CPU INT8 is safer."
 			efficiency_note = "This keeps the recommendation deterministic and broadly compatible."
 	else:
-		if gpu_available and gpu_tier == "strong_gpu" and ram_tier != "constrained":
+		if gpu_available and supported_gpu_backend and gpu_tier == "strong_gpu" and ram_tier != "constrained":
 			optimization = "fp16"
-			device = "cuda"
-			profile_note = f"{gpu_name} provides enough headroom for a balanced GPU-accelerated path."
+			device = device_name
+			profile_note = f"{gpu_name} provides enough headroom for a balanced GPU-accelerated path on {device_name.upper()}."
 			efficiency_note = "FP16 offers a practical speed-up without pushing memory usage too hard."
-		elif gpu_available and gpu_tier == "modest_gpu" and ram_tier == "plenty":
+		elif gpu_available and supported_gpu_backend and gpu_tier == "modest_gpu" and ram_tier == "plenty":
 			optimization = "fp16"
-			device = "cuda"
-			profile_note = f"{gpu_name} can handle a balanced GPU path with moderate VRAM headroom."
+			device = device_name
+			profile_note = f"{gpu_name} can handle a balanced GPU path with moderate VRAM headroom on {device_name.upper()}."
 			efficiency_note = "The profile suggests the speed gain is worth the GPU cost."
 		else:
 			optimization = "int8"

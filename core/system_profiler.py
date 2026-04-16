@@ -53,7 +53,9 @@ def get_system_profile() -> SystemProfile:
 		"os": "Unknown",
 		"cpu_cores": 1,
 		"ram_gb": 0.0,
+		"ram_available_gb": 0.0,
 		"gpu_available": False,
+		"gpu_backend": "cpu",
 		"gpu_name": "None",
 		"gpu_vram_gb": 0.0,
 		"dgpu_name": "None",
@@ -107,6 +109,7 @@ def get_system_profile() -> SystemProfile:
 
 			props = cuda.get_device_properties(device_idx)
 			profile["gpu_available"] = True
+			profile["gpu_backend"] = "cuda"
 			profile["gpu_name"] = getattr(props, "name", "Unknown GPU") or "Unknown GPU"
 			profile["gpu_vram_gb"] = max(_bytes_to_gb(float(getattr(props, "total_memory", 0.0))), 0.0)
 			profile["dgpu_name"] = profile["gpu_name"]
@@ -114,6 +117,7 @@ def get_system_profile() -> SystemProfile:
 			
 		elif mps is not None and bool(mps.is_available()):
 			profile["gpu_available"] = True
+			profile["gpu_backend"] = "mps"
 			profile["gpu_name"] = "Apple Silicon MPS"
 			# Apple Silicon uses unified memory; safely report the available system RAM as VRAM
 			profile["gpu_vram_gb"] = profile.get("ram_available_gb", profile["ram_gb"])
@@ -133,6 +137,7 @@ def get_system_profile() -> SystemProfile:
 					line = line.strip()
 					if line and line.lower() != "name" and "virtual" not in line.lower() and "basic" not in line.lower():
 						profile["gpu_available"] = True
+						profile["gpu_backend"] = "generic"
 						profile["gpu_name"] = line
 						profile["gpu_vram_gb"] = profile.get("ram_available_gb", profile["ram_gb"]) / 2.0
 						profile["igpu_name"] = profile["gpu_name"]
@@ -147,6 +152,7 @@ def get_system_profile() -> SystemProfile:
 							name = parts[1].split("(rev")[0].strip()
 							if "virtual" not in name.lower() and "vmware" not in name.lower():
 								profile["gpu_available"] = True
+								profile["gpu_backend"] = "generic"
 								profile["gpu_name"] = name
 								profile["gpu_vram_gb"] = profile.get("ram_available_gb", profile["ram_gb"]) / 2.0
 								profile["igpu_name"] = profile["gpu_name"]

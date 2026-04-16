@@ -24,6 +24,7 @@ def test_get_system_profile_has_expected_keys(reset_profiler_deps: None) -> None
         "ram_gb",
         "ram_available_gb",
         "gpu_available",
+        "gpu_backend",
         "gpu_name",
         "gpu_vram_gb",
         "dgpu_name",
@@ -179,6 +180,7 @@ def test_system_profiler_mps(reset_profiler_deps: None, monkeypatch: pytest.Monk
     assert profile["gpu_name"] == "Apple Silicon MPS"
     assert profile["gpu_vram_gb"] == 10.0
     assert profile["ram_gb"] == 16.0
+    assert profile["gpu_backend"] == "mps"
 
 
 def test_darwin_npu_detection_requires_explicit_probe(reset_profiler_deps: None, monkeypatch: pytest.MonkeyPatch) -> None:

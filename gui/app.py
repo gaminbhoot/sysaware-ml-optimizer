@@ -11,7 +11,7 @@ from core.prompt_optimizer import optimize_prompt
 from core.estimator import estimate_performance
 from core.strategy_engine import get_strategy
 from core.autotuner import autotune
-import torch
+from main import load_model_from_path
 
 from gui.helpers import clear_pipeline_state, format_range, format_memory, format_gpu_name, has_required_inputs
 
@@ -300,11 +300,12 @@ with col_left:
             del st.session_state["model"]
 
     model_path = st.text_input("Model path (.pt / .pth)", placeholder="e.g. /models/resnet50.pt", on_change=on_model_path_change)
+    unsafe_load = st.checkbox("Unsafe load (advanced)", value=False, help="Allow full-module checkpoints that require unpickling. Only enable for trusted files.")
 
     if st.button("▶  Load Model", key="btn_load") and model_path:
         with st.spinner("Analyzing model..."):
             try:
-                model = torch.load(model_path, map_location="cpu", weights_only=True)
+                model = load_model_from_path(model_path, unsafe_load=unsafe_load)
                 analysis = analyze_model(model)
                 st.session_state["model"] = model
                 st.session_state["model_analysis"] = analysis

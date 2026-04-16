@@ -110,21 +110,28 @@ def convert_to_fp16(model: Any, profile: dict[str, Any]) -> tuple[Any, dict[str,
 		return model, _base_metadata("fp16", "cpu", False, ["GPU is not available in the system profile"])
 
 	if torch is None or not hasattr(torch, "cuda") or not callable(getattr(torch.cuda, "is_available", None)):
-		return model, _base_metadata("fp16", "cpu", False, ["CUDA is unavailable in the current environment"])
+		return model, _base_metadata("fp16", "cpu", False, ["Accelerated backends are unavailable in the current environment"])
 
-	if not torch.cuda.is_available():
+	backend = str(profile.get("gpu_backend", "cuda")).lower()
+	device_name = "cuda"
+	if backend == "mps":
+		mps = getattr(getattr(torch, "backends", None), "mps", None)
+		if mps is None or not bool(mps.is_available()):
+			return model, _base_metadata("fp16", "mps", False, ["MPS is not available in torch"])
+		device_name = "mps"
+	elif not torch.cuda.is_available():
 		return model, _base_metadata("fp16", "cpu", False, ["CUDA is not available in torch"])
 
 	target = _clone_model(model)
 	try:
 		if hasattr(target, "to"):
-			target = target.to("cuda")
+			target = target.to(device_name)
 		if hasattr(target, "half"):
 			target = target.half()
-		return target, _base_metadata("fp16", "cuda", True, [])
+		return target, _base_metadata("fp16", device_name, True, [])
 	except Exception as exc:
 		logger.warning("FP16 conversion failed: %s", exc)
-		return model, _base_metadata("fp16", "cuda", False, [str(exc)])
+		return model, _base_metadata("fp16", device_name, False, [str(exc)])
 
 
 def optimize_model(model: Any, profile: dict[str, Any], mode: str = "int8") -> tuple[Any, dict[str, Any]]:

@@ -42,10 +42,12 @@ python main.py --model-path ./models/resnet50.pt --goal memory
 python main.py --model-path ./models/transformer.pth --goal balanced --json
 
 # Enable prompt optimization along with performance profiling
-python main.py --model-path ./models/bert.pt --goal performance \
+python main.py --model-path ./models/bert.pt --goal balanced \
                --optimize-prompt \
                --prompt-text "Please can you write a python script that summarizes this?" \
                --prompt-type coding
+
+If you need to load a trusted full-module checkpoint instead of a weights-only file, use `--unsafe-load` on the CLI or the corresponding GUI toggle.
 ```
 
 ## Quickstart (GUI)

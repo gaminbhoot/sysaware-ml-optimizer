@@ -194,6 +194,23 @@ def test_fp16_conversion_uses_to_and_half_when_cuda_available(monkeypatch: pytes
     assert model.half_calls == 1
 
 
+def test_fp16_conversion_uses_mps_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_torch = SimpleNamespace(
+        cuda=SimpleNamespace(is_available=lambda: False),
+        backends=SimpleNamespace(mps=SimpleNamespace(is_available=lambda: True)),
+    )
+    monkeypatch.setattr(optimizer, "torch", fake_torch)
+    model = FakeModel()
+    optimized_model, metadata = optimizer.convert_to_fp16(model, {"gpu_available": True, "gpu_backend": "mps"})
+
+    assert optimized_model is model
+    assert metadata["method"] == "fp16"
+    assert metadata["applied"] is True
+    assert metadata["device"] == "mps"
+    assert model.to_calls == ["mps"]
+    assert model.half_calls == 1
+
+
 def test_fp16_conversion_handles_internal_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_torch = SimpleNamespace(
         cuda=SimpleNamespace(is_available=lambda: True),

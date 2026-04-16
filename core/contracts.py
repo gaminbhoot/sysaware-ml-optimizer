@@ -16,7 +16,9 @@ class SystemProfile(TypedDict):
     os: str
     cpu_cores: int
     ram_gb: float
+    ram_available_gb: float
     gpu_available: bool
+    gpu_backend: str
     gpu_name: str
     gpu_vram_gb: float
     dgpu_name: str

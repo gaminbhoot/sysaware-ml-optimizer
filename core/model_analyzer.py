@@ -47,6 +47,34 @@ def _sum_tensor_collection(values: list[Any]) -> tuple[int, float]:
 	return count, size_mb
 
 
+def _sum_nested_tensors(value: Any) -> tuple[int, float]:
+	if _is_tensor_like(value):
+		try:
+			return int(value.numel()), _tensor_size_mb(value)
+		except Exception:
+			return 0, 0.0
+
+	if isinstance(value, Mapping):
+		total_params = 0
+		size_mb = 0.0
+		for nested_value in value.values():
+			nested_params, nested_size = _sum_nested_tensors(nested_value)
+			total_params += nested_params
+			size_mb += nested_size
+		return total_params, size_mb
+
+	if isinstance(value, (list, tuple)):
+		total_params = 0
+		size_mb = 0.0
+		for nested_value in value:
+			nested_params, nested_size = _sum_nested_tensors(nested_value)
+			total_params += nested_params
+			size_mb += nested_size
+		return total_params, size_mb
+
+	return 0, 0.0
+
+
 def analyze_model(model: Any) -> ModelAnalysis:
 	if model is None:
 		raise ValueError("Model cannot be None")
@@ -82,13 +110,19 @@ def analyze_model(model: Any) -> ModelAnalysis:
 		size_mb += buffer_size_mb
 
 	elif isinstance(model, Mapping):
-		raise NotImplementedError(
-			"Analyzing state dictionaries directly is not supported. Please instantiate the torch.nn.Module first."
-		)
+		for value in model.values():
+			value_params, value_size = _sum_nested_tensors(value)
+			total_params += value_params
+			size_mb += value_size
+		if not total_params:
+			logger.warning("Model '%s' mapping contains no tensor-like values", model_name)
 	elif isinstance(model, (list, tuple)):
-		raise NotImplementedError(
-			"Analyzing unstructured collections of tensors is not supported. Please instantiate the torch.nn.Module first."
-		)
+		for value in model:
+			value_params, value_size = _sum_nested_tensors(value)
+			total_params += value_params
+			size_mb += value_size
+		if not total_params:
+			logger.warning("Model '%s' collection contains no tensor-like values", model_name)
 	else:
 		raise ValueError(
 			"Unsupported model type. Expected a torch.nn.Module."
