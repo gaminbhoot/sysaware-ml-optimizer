@@ -26,199 +26,221 @@ st.set_page_config(
 # ── Inject OctaWipe-style CSS (Orbitron + Fira Code, dark grid, cyan accents) ─
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Fira+Code:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;700;800&family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
 
 :root {
-    --bg:        #0a0a0a;
-    --surface:   #111111;
-    --border:    #1f1f1f;
-    --accent:    #00ffe0;
-    --accent2:   #00ff88;
-    --muted:     #3a3a3a;
-    --text:      #e8e8e8;
-    --text-dim:  #666666;
-    --danger:    #ff4444;
-    --warn:      #ffaa00;
+    --bg:        #000000;
+    --surface:   rgba(0, 0, 0, 0.3);
+    --border:    rgba(255, 255, 255, 0.25);
+    --accent:    #ffffff;
+    --accent2:   #f0f0f0;
+    --muted:     #111111;
+    --text:      #ffffff;
+    --text-dim:  rgba(255, 255, 255, 0.7);
+    --danger:    #ef5350;
+    --warn:      #ffb300;
 }
 
 html, body, [class*="css"] {
-    font-family: 'Fira Code', monospace !important;
+    font-family: 'Overpass', sans-serif !important;
     background-color: var(--bg) !important;
     color: var(--text) !important;
 }
 
 .stApp {
     background-color: var(--bg) !important;
-    background-image: radial-gradient(circle, #1e1e1e 1px, transparent 1px) !important;
-    background-size: 28px 28px !important;
 }
 
 .main .block-container {
-    padding: 2rem 3rem !important;
+    padding: 3rem 4rem !important;
     max-width: 1200px !important;
 }
 
 .octa-header {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 1rem;
-    border-bottom: 1px solid var(--accent);
-    padding-bottom: 1.2rem;
-    margin-bottom: 2.5rem;
+    justify-content: center;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 2.5rem;
+    margin-bottom: 3rem;
+    text-align: center;
+    position: relative;
+    padding-top: 1rem;
 }
 .octa-logo {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 1.6rem;
-    font-weight: 900;
+    font-family: 'Playfair Display', serif;
+    font-size: 5rem;
+    font-weight: 700;
     color: var(--accent);
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    letter-spacing: -1px;
+    text-transform: lowercase;
+    line-height: 1;
 }
 .octa-sub {
-    font-size: 0.7rem;
+    font-family: 'Overpass', sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
     color: var(--text-dim);
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    margin-top: 2px;
+    letter-spacing: 0.1em;
+    text-transform: lowercase;
+    margin-top: 0.5rem;
 }
 .octa-badge {
-    margin-left: auto;
-    font-size: 0.65rem;
-    font-family: 'Orbitron', sans-serif;
-    color: var(--accent2);
-    border: 1px solid var(--accent2);
-    padding: 3px 10px;
-    letter-spacing: 0.15em;
+    display: none;
 }
 
 .octa-section {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 0.65rem;
-    letter-spacing: 0.25em;
+    font-family: 'Overpass', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
     color: var(--accent);
-    text-transform: uppercase;
-    border-left: 2px solid var(--accent);
-    padding-left: 10px;
-    margin-bottom: 1rem;
-    margin-top: 2rem;
+    text-transform: lowercase;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+    margin-top: 3rem;
+    border-left: none;
+    padding-left: 0;
 }
 
 .octa-card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-top: 1px solid var(--accent);
-    padding: 1.2rem 1.4rem;
-    margin-bottom: 1rem;
-    font-size: 0.82rem;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+    font-size: 1rem;
 }
 .octa-card-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 4px 0;
-    border-bottom: 1px solid var(--border);
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 .octa-card-row:last-child { border-bottom: none; }
-.octa-key   { color: var(--text-dim); font-size: 0.75rem; letter-spacing: 0.05em; }
-.octa-val   { color: var(--accent); font-family: 'Fira Code', monospace; font-size: 0.82rem; }
-.octa-val-ok  { color: var(--accent2); }
-.octa-val-bad { color: var(--danger); }
+.octa-key   { color: var(--text-dim); font-size: 0.9rem; letter-spacing: 0.05em; font-weight: 400; text-transform: lowercase; }
+.octa-val   { color: var(--accent); font-family: 'Overpass', sans-serif; font-size: 1rem; font-weight: 700; }
+.octa-val-ok  { color: var(--accent); }
+.octa-val-bad { color: var(--danger); font-weight: 600; }
 
 .octa-stat-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 1px;
-    background: var(--border);
-    border: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
     margin-bottom: 1rem;
 }
 .octa-stat {
-    background: var(--surface);
-    padding: 1rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 1.5rem 1rem;
     text-align: center;
+    flex: 1;
 }
 .octa-stat-val {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 1.3rem;
+    font-family: 'Playfair Display', serif;
+    font-size: 2rem;
     font-weight: 700;
     color: var(--accent);
     display: block;
 }
 .octa-stat-label {
-    font-size: 0.6rem;
+    font-family: 'Overpass', sans-serif;
+    font-size: 0.8rem;
     color: var(--text-dim);
     letter-spacing: 0.15em;
     text-transform: uppercase;
-    margin-top: 4px;
+    margin-top: 6px;
     display: block;
+    font-weight: 600;
 }
 
-.octa-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-top: 0.5rem; }
+.octa-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-top: 0.5rem; }
 .octa-table th {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 0.6rem;
-    letter-spacing: 0.2em;
+    font-family: 'Overpass', sans-serif;
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
     color: var(--text-dim);
     text-transform: uppercase;
     border-bottom: 1px solid var(--border);
-    padding: 6px 10px;
+    padding: 8px 10px;
     text-align: left;
+    font-weight: 700;
 }
-.octa-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); font-family: 'Fira Code', monospace; color: var(--text); }
-.octa-table tr:hover td { background: #161616; }
-.delta-good { color: var(--accent2); }
+.octa-table td { padding: 12px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); font-family: 'Overpass', sans-serif; color: var(--text); }
+.octa-table tr:hover td { background: rgba(255,255,255,0.02); }
+.delta-good { color: var(--accent); font-weight: 700; }
 .delta-bad  { color: var(--danger); }
 
 .stButton > button {
-    font-family: 'Orbitron', sans-serif !important;
-    font-size: 0.65rem !important;
-    letter-spacing: 0.2em !important;
+    font-family: 'Overpass', sans-serif !important;
+    font-size: 0.85rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.2rem !important;
     text-transform: uppercase !important;
-    background: transparent !important;
+    background: rgba(0, 0, 0, 0.3) !important;
     color: var(--accent) !important;
-    border: 1px solid var(--accent) !important;
+    border: 1px solid var(--border) !important;
     border-radius: 0 !important;
-    padding: 0.5rem 1.5rem !important;
-    transition: all 0.2s !important;
+    padding: 1rem 2rem !important;
+    transition: background 0.3s ease, border 0.3s ease !important;
+    width: auto !important;
+    display: inline-flex !important;
+    justify-content: center !important;
+    margin-top: 0.5rem !important;
 }
-.stButton > button:hover { background: var(--accent) !important; color: #000 !important; }
+.stButton > button:hover { background: var(--accent) !important; border-color: var(--accent) !important; color: #000 !important; }
 .stButton > button:active { transform: scale(0.98) !important; }
 
 .stSelectbox > div > div,
-.stTextInput > div > div > input {
-    background: var(--surface) !important;
+.stTextInput > div > div > input,
+.stTextArea > div > div > textarea {
+    background: transparent !important;
     border: 1px solid var(--border) !important;
     border-radius: 0 !important;
     color: var(--text) !important;
-    font-family: 'Fira Code', monospace !important;
+    font-family: 'Overpass', sans-serif !important;
+    padding: 0.8rem !important;
 }
-.stSelectbox label, .stTextInput label, .stRadio label {
-    font-family: 'Orbitron', sans-serif !important;
-    font-size: 0.6rem !important;
-    letter-spacing: 0.2em !important;
+.stSelectbox label, .stTextInput label, .stRadio label, .stTextArea label, .stCheckbox label {
+    font-family: 'Overpass', sans-serif !important;
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.1rem !important;
     text-transform: uppercase !important;
     color: var(--text-dim) !important;
 }
 .stRadio > div > label {
-    font-family: 'Fira Code', monospace !important;
-    font-size: 0.78rem !important;
-    text-transform: none !important;
+    font-family: 'Overpass', sans-serif !important;
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
     color: var(--text) !important;
-    background: var(--surface) !important;
+    background: transparent !important;
     border: 1px solid var(--border) !important;
-    padding: 6px 16px !important;
+    padding: 10px 20px !important;
     cursor: pointer !important;
+    border-radius: 0 !important;
+    min-width: 120px !important;
+    text-align: center !important;
+    display: inline-flex !important;
+    justify-content: center !important;
 }
-.stRadio > div > label:has(input:checked) { border-color: var(--accent) !important; color: var(--accent) !important; }
-.stAlert { border-radius: 0 !important; border-left: 2px solid var(--accent) !important; background: var(--surface) !important; font-family: 'Fira Code', monospace !important; font-size: 0.8rem !important; }
-hr { border-color: var(--border) !important; margin: 2rem 0 !important; }
-[data-testid="stMetricValue"] { font-family: 'Orbitron', sans-serif !important; color: var(--accent) !important; font-size: 1.4rem !important; }
-[data-testid="stMetricLabel"] { font-family: 'Orbitron', sans-serif !important; font-size: 0.6rem !important; letter-spacing: 0.15em !important; text-transform: uppercase !important; color: var(--text-dim) !important; }
-[data-testid="stSidebar"] { background: var(--surface) !important; border-right: 1px solid var(--border) !important; }
-::-webkit-scrollbar { width: 4px; }
+.stRadio > div { flex-wrap: wrap; gap: 10px; }
+.stRadio > div > label:has(input:checked) { border-color: var(--accent) !important; background: var(--accent) !important; color: #000 !important; }
+
+.stAlert { border-radius: 0 !important; border: 1px solid var(--border) !important; border-left: 3px solid var(--accent) !important; background: rgba(0,0,0,0.5) !important; font-family: 'Overpass', sans-serif !important; font-size: 0.9rem !important; }
+hr { border-color: var(--border) !important; margin: 3rem 0 !important; }
+
+[data-testid="stMetricValue"] { font-family: 'Playfair Display', serif !important; color: var(--accent) !important; font-size: 2.2rem !important; font-weight: 700 !important; }
+[data-testid="stMetricLabel"] { font-family: 'Overpass', sans-serif !important; font-size: 0.8rem !important; font-weight: 600 !important; letter-spacing: 0.15rem !important; text-transform: uppercase !important; color: var(--text-dim) !important; }
+
+[data-testid="stSidebar"] { background: var(--bg) !important; border-right: 1px solid var(--border) !important; }
+
+::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--muted); }
-::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+::-webkit-scrollbar-thumb { background: #333; }
+::-webkit-scrollbar-thumb:hover { background: #666; }
 </style>
 """, unsafe_allow_html=True)
 
