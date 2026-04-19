@@ -1,0 +1,9 @@
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;700;800&family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
+
+body {
+  @apply bg-black text-white font-sans antialiased;
+}
