@@ -321,13 +321,52 @@ with col_left:
         if "model" in st.session_state:
             del st.session_state["model"]
 
-    model_path = st.text_input("Model path (.pt / .pth)", placeholder="e.g. /models/resnet50.pt", on_change=on_model_path_change)
+    def select_file():
+        import sys
+        if sys.platform == "darwin":
+            import subprocess
+            try:
+                result = subprocess.run(
+                    ['osascript', '-e', 'POSIX path of (choose file with prompt "Select PyTorch Model:")'],
+                    capture_output=True, text=True, check=True
+                )
+                file_path = result.stdout.strip()
+                if file_path:
+                    st.session_state["model_path_input"] = file_path
+                    on_model_path_change()
+            except subprocess.CalledProcessError:
+                pass  # User cancelled the dialog
+        else:
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                root = tk.Tk()
+                root.withdraw()
+                root.wm_attributes('-topmost', 1)
+                file_path = filedialog.askopenfilename(master=root, filetypes=[("PyTorch Models", "*.pt *.pth"), ("All Files", "*.*")])
+                root.destroy()
+                if file_path:
+                    st.session_state["model_path_input"] = file_path
+                    on_model_path_change()
+            except ImportError:
+                pass
+
+    col_input, col_btn = st.columns([4, 1])
+    with col_input:
+        model_path = st.text_input("Model path (.pt / .pth)", key="model_path_input", placeholder="e.g. /models/resnet50.pt", on_change=on_model_path_change)
+    with col_btn:
+        st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+        if st.button("📁 Browse", key="btn_browse"):
+            select_file()
+            st.rerun()
+
     unsafe_load = st.checkbox("Unsafe load (advanced)", value=False, help="Allow full-module checkpoints that require unpickling. Only enable for trusted files.")
 
     if st.button("▶  Load Model", key="btn_load") and model_path:
         with st.spinner("Analyzing model..."):
             try:
                 model = load_model_from_path(model_path, unsafe_load=unsafe_load)
+                
                 analysis = analyze_model(model)
                 st.session_state["model"] = model
                 st.session_state["model_analysis"] = analysis

@@ -145,16 +145,19 @@ def test_autotune_rejects_invalid_goal(goal) -> None:
 def test_autotune_score_function_prefers_lower_latency_for_latency_goal() -> None:
     fast = {"latency_range_ms": (1.0, 2.0), "memory_mb": 100.0, "confidence": "high", "method": "x"}
     slow = {"latency_range_ms": (10.0, 20.0), "memory_mb": 1.0, "confidence": "high", "method": "x"}
-    assert autotuner._candidate_score(fast, "latency") < autotuner._candidate_score(slow, "latency")
+    meta = {"accuracy_parity": {"parity_score": 1.0}}
+    assert autotuner._candidate_score(fast, "latency", meta) < autotuner._candidate_score(slow, "latency", meta)
 
 
 def test_autotune_score_function_prefers_lower_memory_for_memory_goal() -> None:
     low_mem = {"latency_range_ms": (10.0, 20.0), "memory_mb": 5.0, "confidence": "high", "method": "x"}
     high_mem = {"latency_range_ms": (1.0, 2.0), "memory_mb": 50.0, "confidence": "high", "method": "x"}
-    assert autotuner._candidate_score(low_mem, "memory") < autotuner._candidate_score(high_mem, "memory")
+    meta = {"accuracy_parity": {"parity_score": 1.0}}
+    assert autotuner._candidate_score(low_mem, "memory", meta) < autotuner._candidate_score(high_mem, "memory", meta)
 
 
 def test_autotune_score_function_balanced_uses_weighted_combination() -> None:
     a = {"latency_range_ms": (4.0, 5.0), "memory_mb": 20.0, "confidence": "high", "method": "x"}
     b = {"latency_range_ms": (5.0, 6.0), "memory_mb": 5.0, "confidence": "high", "method": "x"}
-    assert autotuner._candidate_score(a, "balanced") != autotuner._candidate_score(b, "balanced")
+    meta = {"accuracy_parity": {"parity_score": 1.0}}
+    assert autotuner._candidate_score(a, "balanced", meta) != autotuner._candidate_score(b, "balanced", meta)

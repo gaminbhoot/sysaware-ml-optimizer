@@ -12,15 +12,25 @@ from .validation import validate_goal
 logger = get_logger("sysaware.autotuner")
 
 
-def _candidate_score(result: PerformanceEstimate, goal: GoalType) -> float:
+def _candidate_score(result: PerformanceEstimate, goal: GoalType, metadata: dict[str, Any]) -> float:
 	low, high = result["latency_range_ms"]
 	memory = float(result["memory_mb"])
+	
+	# Accuracy penalty: Lower parity score increases the final 'cost' score
+	accuracy_parity = 1.0
+	parity_info = metadata.get("accuracy_parity")
+	if parity_info and isinstance(parity_info, dict):
+		accuracy_parity = parity_info.get("parity_score", 1.0)
+	
+	# We want to minimize the score, so we divide by accuracy parity
+	# If parity is 0.5 (50% loss), the score doubles (making it less attractive)
+	penalty_multiplier = 1.0 / max(0.1, accuracy_parity)
 
 	if goal == "latency":
-		return float(high)
+		return float(high) * penalty_multiplier
 	if goal == "memory":
-		return memory
-	return float(high) * 0.7 + memory * 0.3
+		return memory * penalty_multiplier
+	return (float(high) * 0.7 + memory * 0.3) * penalty_multiplier
 
 
 def _baseline_candidate(model: Any, profile: dict[str, Any]) -> tuple[Any, dict[str, Any], PerformanceEstimate]:
@@ -81,7 +91,7 @@ def autotune(model: Any, profile: dict[str, Any], goal: str) -> tuple[dict[str, 
 
 	scored_candidates = []
 	for candidate in candidates[:3]:
-		score = _candidate_score(candidate["result"], goal_v)
+		score = _candidate_score(candidate["result"], goal_v, candidate["metadata"])
 		scored_candidates.append((score, candidate))
 		logger.info("Candidate %s scored %.4f for goal=%s", candidate["name"], score, goal_v)
 

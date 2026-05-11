@@ -8,6 +8,7 @@ import core.model_analyzer as ma
 import core.estimator as est
 import core.strategy_engine as se
 import core.prompt_optimizer as po
+import core.autotuner as at
 from main import load_model_from_path
 
 app = FastAPI(title="SysAware ML Optimizer API")
@@ -29,6 +30,12 @@ class StrategyRequest(BaseModel):
 class PromptRequest(BaseModel):
     prompt: str
     intent: str = "general"
+
+class AutotuneRequest(BaseModel):
+    model_path: str
+    system_profile: dict
+    goal: str
+    unsafe_load: bool = False
 
 # --- API Routes ---
 @app.get("/api/system")
@@ -75,8 +82,20 @@ def optimize_prompt(req: PromptRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/optimize/autotune")
+def autotune_endpoint(req: AutotuneRequest):
+    try:
+        model_obj = load_model_from_path(req.model_path, unsafe_load=req.unsafe_load)
+        best_config, _, best_result = at.autotune(model_obj, req.system_profile, req.goal)
+        return {
+            "status": "success", 
+            "best_config": best_config,
+            "best_result": best_result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # --- Serve React Frontend ---
-# Make sure to run `npm run build` inside `frontend/` so that the dist folder exists!
 if os.path.exists("frontend/dist"):
     app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
 else:
@@ -88,5 +107,4 @@ else:
         }
 
 if __name__ == "__main__":
-    # Start the FastAPI server using Uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

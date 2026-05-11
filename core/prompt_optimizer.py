@@ -1,7 +1,7 @@
 import re
 from typing import Dict, List
 
-# Personas and Goals V2
+# Advanced Prompt Engineering Configs V3
 INTENT_CONFIGS = {
     "general": {
         "persona": "You are a versatile and precise AI assistant.",
@@ -9,42 +9,61 @@ INTENT_CONFIGS = {
         "constraints": [
             "Be direct and objective.",
             "Call out uncertainty if the request is ambiguous.",
-            "Prioritize accuracy over length."
+            "Prioritize accuracy over length.",
+            "Avoid corporate jargon and filler phrases."
         ],
-        "output": "A clear, structured response with a final summary."
+        "output": "A clear, structured response with a final summary.",
+        "few_shot": [
+            {"in": "How do I make a cake?", "out": "Provide a list of ingredients, a step-by-step preparation guide, and baking instructions."}
+        ],
+        "failure_clause": "If you cannot answer based on the provided context, say 'I don't know' instead of hallucinating."
     },
     "coding": {
-        "persona": "You are a Senior Software Engineer and Architect.",
+        "persona": "You are a Senior Software Engineer and Architect specializing in clean, maintainable systems.",
         "goal": "Produce production-ready, maintainable code with architectural context.",
         "constraints": [
-            "Use type hints and follow PEP 8 for Python.",
+            "Use type hints and follow PEP 8 (or language-specific idiomatic standards).",
             "Prioritize readability and modularity.",
             "Include brief explanations for complex logic.",
-            "Avoid boilerplate; focus on the core implementation."
+            "Avoid boilerplate; focus on the core implementation.",
+            "Explicitly handle edge cases and potential errors."
         ],
-        "output": "Clean code blocks followed by a brief 'How it Works' section."
+        "output": "Clean code blocks within markdown tags, followed by a 'How it Works' section and a 'Complexity Analysis'.",
+        "few_shot": [
+            {"in": "Write a python function to check for palindromes.", "out": "```python\ndef is_palindrome(text: str) -> bool:\n    \"\"\"Checks if a string is a palindrome ignoring case and non-alphanumeric chars.\"\"\"\n    clean_text = ''.join(char.lower() for char in text if char.isalnum())\n    return clean_text == clean_text[::-1]\n```\n**How it Works:** Filter alphanumeric, lowercase, then reverse compare."}
+        ],
+        "failure_clause": "If the task is technically impossible or the requirements are fundamentally flawed, explain the technical limitation clearly."
     },
     "analysis": {
-        "persona": "You are a Principal Data Scientist and Business Analyst.",
-        "goal": "Provide a deep-dive analysis focusing on trade-offs and ROI.",
+        "persona": "You are a Principal Data Scientist and Strategic Business Analyst.",
+        "goal": "Provide a deep-dive analysis focusing on trade-offs, ROI, and adversarial critique.",
         "constraints": [
-            "Evaluate both pros and cons.",
+            "Evaluate both pros and cons with balanced weight.",
             "Focus on actionable insights rather than general observations.",
             "Quantify impact where possible.",
-            "Structure the response using a 'Situation-Complication-Resolution' framework."
+            "Adversarial Validation: Generate two distinct perspectives on the problem and critique both before reaching a final conclusion.",
+            "Use a 'Situation-Complication-Resolution' framework."
         ],
-        "output": "A detailed analysis with a table for comparison and a clear recommendation."
+        "output": "A detailed analysis including a 'Trade-offs Table' and a final 'Strategic Recommendation'.",
+        "few_shot": [
+            {"in": "Should we move to AWS or stay on-prem?", "out": "Compare costs, scalability, and security. Analyze the 'Cloud vs On-Prem' debate from a long-term ROI perspective."}
+        ],
+        "failure_clause": "If the data provided is insufficient for a robust analysis, specify exactly what additional data is required."
     },
     "creative": {
-        "persona": "You are a Creative Director and Master Storyteller.",
-        "goal": "Produce vivid, original, and engaging content that captures attention.",
+        "persona": "You are a Creative Director and Master Storyteller with a focus on evocative, high-impact narratives.",
+        "goal": "Produce vivid, original, and engaging content that captures attention and resonates emotionally.",
         "constraints": [
             "Prioritize strong imagery and evocative language.",
             "Maintain a consistent tone and voice throughout.",
             "Break traditional patterns to create something unique.",
-            "Ensure the output aligns strictly with any stylistic constraints."
+            "Ensure the output aligns strictly with the target audience's psychological profile."
         ],
-        "output": "A compelling narrative or creative piece followed by a short 'Creative Rationale'."
+        "output": "A compelling narrative or creative piece followed by a short 'Creative Rationale' explaining the stylistic choices.",
+        "few_shot": [
+            {"in": "Write a tagline for a futuristic coffee brand.", "out": "'Neuro-Brew: Wake up the 23rd Century.'\n**Rationale:** Uses a high-tech prefix with a time-anchored promise."}
+        ],
+        "failure_clause": "If the creative constraints are mutually exclusive, prioritize the primary emotional goal and explain the trade-off."
     }
 }
 
@@ -55,17 +74,17 @@ def _normalize_spaces(text: str) -> str:
     return " ".join(text.strip().split())
 
 def _has_output_hint(text: str) -> bool:
-    markers = ["format", "json", "table", "list", "bullet", "steps", "code block", "xml", "tag"]
+    markers = ["format", "json", "table", "list", "bullet", "steps", "code block", "xml", "tag", "requirement"]
     lower = text.lower()
     return any(m in lower for m in markers)
 
 def _has_constraints(text: str) -> bool:
-    markers = ["must", "should", "limit", "max", "avoid", "do not", "only", "rule"]
+    markers = ["must", "should", "limit", "max", "avoid", "do not", "only", "rule", "constraint"]
     lower = text.lower()
     return any(m in lower for m in markers)
 
 def _has_context(text: str) -> bool:
-    markers = ["context", "background", "for", "because", "project", "audience", "scenario"]
+    markers = ["context", "background", "for", "because", "project", "audience", "scenario", "abc"]
     lower = text.lower()
     return any(m in lower for m in markers)
 
@@ -102,7 +121,7 @@ def build_suggestions(prompt: str) -> List[str]:
         suggestions.append("Specify output format (for example: JSON, bullets, steps, or code block).")
 
     if not suggestions:
-        suggestions.append("Prompt already has good structure; keep it as-is or add concrete examples.")
+        suggestions.append("Prompt already has good structure; keep it as-is or add more concrete examples.")
 
     return suggestions
 
@@ -131,17 +150,20 @@ def optimize_prompt(user_prompt: str, intent: str = "general") -> Dict[str, obje
     before_score = score_prompt(normalized)
     suggestions = build_suggestions(cleaned_prompt)
 
-    # Building V2 Template with XML tagging and CoT triggers
+    # Building V3 Template with programmatic sections
     constraints_str = "\n".join([f"- {c}" for c in config["constraints"]])
+    few_shot_str = "\n".join([f"Input: {ex['in']}\nOutput: {ex['out']}" for ex in config["few_shot"]])
 
     optimized = (
-        f"Persona: {config['persona']}\n"
-        f"Goal: {config['goal']}\n\n"
-        f"<task>\nTask: {cleaned_prompt}\n</task>\n\n"
-        f"<context>\n[Provide relevant background, audience info, or technical environment here]\n</context>\n\n"
-        f"<constraints>\n{constraints_str}\n</constraints>\n\n"
-        f"<thought_process>\nBefore providing the final output, briefly outline your reasoning and key assumptions.\n</thought_process>\n\n"
-        f"Output Format: {config['output']}"
+        f"# Persona/Role\n{config['persona']}\n\n"
+        f"# Task Definition\nTask: {cleaned_prompt}\nGoal: {config['goal']}\n\n"
+        f"# Context & Constraints (ABC Rule)\n"
+        f"<context>\n[Provide specific project background, target audience, and necessary source material here]\n</context>\n\n"
+        f"<constraints>\n{constraints_str}\n- {config['failure_clause']}\n</constraints>\n\n"
+        f"# Few-Shot Examples\n{few_shot_str}\n\n"
+        f"# Chain-of-Thought Instruction\n"
+        f"<thought_process>\nBefore providing the final output, think step-by-step. Analyze the requirements, list your assumptions, and identify potential complications.\n</thought_process>\n\n"
+        f"# Output Requirements\nFormat: {config['output']}"
     )
 
     after_score = score_prompt(optimized)

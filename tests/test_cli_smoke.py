@@ -136,12 +136,12 @@ def test_cli_json_errors(monkeypatch: pytest.MonkeyPatch, capsys: pytest.Capture
     assert code == 2
     parsed = json.loads(output)
     assert parsed["status"] == "error"
-    assert "Model file not found:" in parsed["message"]
+    assert "Model file or directory not found:" in parsed["message"]
     assert parsed["code"] == 500
 
 def test_load_model_from_path_rejects_missing_file(tmp_path: Path) -> None:
     missing = tmp_path / "missing.pt"
-    with pytest.raises(FileNotFoundError, match="Model file not found"):
+    with pytest.raises(FileNotFoundError, match="Model file or directory not found"):
         main.load_model_from_path(str(missing))
 
 
