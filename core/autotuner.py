@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import concurrent.futures
 from typing import Any
 
 from .contracts import GoalType, PerformanceEstimate
@@ -54,10 +55,10 @@ def autotune(model: Any, profile: dict[str, Any], goal: str) -> tuple[dict[str, 
 
 	goal_v = validate_goal(goal)
 
-	candidates: list[dict[str, Any]] = []
-
+	# 1. Evaluate baseline immediately (fast)
 	baseline_model, baseline_metadata, baseline_result = _baseline_candidate(model, profile)
-	candidates.append(
+	
+	candidates_results = [
 		{
 			"name": "baseline",
 			"mode": "none",
@@ -65,35 +66,36 @@ def autotune(model: Any, profile: dict[str, Any], goal: str) -> tuple[dict[str, 
 			"metadata": baseline_metadata,
 			"result": baseline_result,
 		}
-	)
+	]
 
-	int8_model, int8_metadata, int8_result = _evaluate_candidate(model, profile, "int8")
-	candidates.append(
-		{
-			"name": "int8",
-			"mode": "int8",
-			"model": int8_model,
-			"metadata": int8_metadata,
-			"result": int8_result,
-		}
-	)
-
-	fp16_model, fp16_metadata, fp16_result = _evaluate_candidate(model, profile, "fp16")
-	candidates.append(
-		{
-			"name": "fp16",
-			"mode": "fp16",
-			"model": fp16_model,
-			"metadata": fp16_metadata,
-			"result": fp16_result,
-		}
-	)
+	# 2. Evaluate specialized candidates in parallel
+	# Note: We use threads because quantization/casting is mostly CPU-bound preparation
+	# and releasing the GIL often happens in torch/native code.
+	modes = ["int8", "fp16"]
+	with concurrent.futures.ThreadPoolExecutor(max_workers=len(modes)) as executor:
+		future_to_mode = {executor.submit(_evaluate_candidate, model, profile, mode): mode for mode in modes}
+		for future in concurrent.futures.as_completed(future_to_mode):
+			mode = future_to_mode[future]
+			try:
+				c_model, c_metadata, c_result = future.result()
+				candidates_results.append({
+					"name": mode,
+					"mode": mode,
+					"model": c_model,
+					"metadata": c_metadata,
+					"result": c_result,
+				})
+			except Exception as exc:
+				logger.error("Candidate %s failed during autotuning: %s", mode, exc)
 
 	scored_candidates = []
-	for candidate in candidates[:3]:
+	for candidate in candidates_results:
 		score = _candidate_score(candidate["result"], goal_v, candidate["metadata"])
 		scored_candidates.append((score, candidate))
 		logger.info("Candidate %s scored %.4f for goal=%s", candidate["name"], score, goal_v)
+
+	if not scored_candidates:
+		raise RuntimeError("Autotuning failed to evaluate any candidates")
 
 	best_score, best_candidate = min(scored_candidates, key=lambda item: item[0])
 	best_config = {

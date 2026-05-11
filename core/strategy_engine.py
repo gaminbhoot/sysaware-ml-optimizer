@@ -5,6 +5,7 @@ from typing import Any
 from .contracts import StrategyResult
 from .logging_utils import get_logger
 from .validation import validate_goal, require_fields, validate_non_negative_number
+from .plugins import registry
 
 
 logger = get_logger("sysaware.strategy_engine")
@@ -60,6 +61,11 @@ def get_strategy(profile: dict[str, Any], goal: str, model_analysis: dict[str, A
 	goal_v = validate_goal(goal)
 	require_fields(profile, ["cpu_cores", "ram_gb", "gpu_available", "gpu_name", "gpu_vram_gb"], "system profile")
 
+	# Query registry for supported modes
+	supported_plugins = registry.list_supported_modes()
+	has_fp16 = "fp16" in supported_plugins
+	has_int8 = "int8" in supported_plugins
+
 	cpu_cores = int(validate_non_negative_number(profile["cpu_cores"], "cpu_cores"))
 	ram_gb = float(validate_non_negative_number(profile["ram_gb"], "ram_gb"))
 	gpu_available = bool(profile["gpu_available"])
@@ -73,42 +79,54 @@ def get_strategy(profile: dict[str, Any], goal: str, model_analysis: dict[str, A
 	gpu_tier = context["gpu_tier"]
 	ram_tier = context["ram_tier"]
 
+	# Default fallback
+	optimization = "int8" if has_int8 else "none"
+	device = "cpu"
+	profile_note = "A stable fallback path was selected."
+	efficiency_note = ""
+
 	if goal_v == "memory":
-		optimization = "int8"
+		optimization = "int8" if has_int8 else "none"
 		device = "cpu"
 		profile_note = "Memory pressure is the priority, so CPU INT8 quantization is the safest low-footprint path."
 		efficiency_note = "This keeps VRAM usage minimal and is robust on CPU-only machines."
+		if not has_int8:
+			profile_note = "Memory is priority, but INT8 plugin is missing. No-op selected."
 		if gpu_available and gpu_tier == "strong_gpu" and ram_tier == "plenty":
 			profile_note = (
 				f"{gpu_name} is available, but the memory goal favors minimizing footprint over throughput."
 			)
 	elif goal_v == "latency":
-		if gpu_available and supported_gpu_backend and gpu_tier in {"strong_gpu", "modest_gpu"} and ram_tier != "constrained":
+		if has_fp16 and gpu_available and supported_gpu_backend and gpu_tier in {"strong_gpu", "modest_gpu"} and ram_tier != "constrained":
 			optimization = "fp16"
 			device = device_name
 			profile_note = f"{gpu_name} has enough VRAM for faster half-precision inference on {device_name.upper()}."
 			efficiency_note = "FP16 should reduce latency without overcommitting memory on this machine."
 		else:
-			optimization = "int8"
+			optimization = "int8" if has_int8 else "none"
 			device = "cpu"
 			profile_note = "The hardware profile does not justify a GPU-first latency path, so CPU INT8 is safer."
 			efficiency_note = "This keeps the recommendation deterministic and broadly compatible."
+			if not has_int8:
+				profile_note = "GPU path rejected and INT8 plugin is missing. No-op selected."
 	else:
-		if gpu_available and supported_gpu_backend and gpu_tier == "strong_gpu" and ram_tier != "constrained":
+		if has_fp16 and gpu_available and supported_gpu_backend and gpu_tier == "strong_gpu" and ram_tier != "constrained":
 			optimization = "fp16"
 			device = device_name
 			profile_note = f"{gpu_name} provides enough headroom for a balanced GPU-accelerated path on {device_name.upper()}."
 			efficiency_note = "FP16 offers a practical speed-up without pushing memory usage too hard."
-		elif gpu_available and supported_gpu_backend and gpu_tier == "modest_gpu" and ram_tier == "plenty":
+		elif has_fp16 and gpu_available and supported_gpu_backend and gpu_tier == "modest_gpu" and ram_tier == "plenty":
 			optimization = "fp16"
 			device = device_name
 			profile_note = f"{gpu_name} can handle a balanced GPU path with moderate VRAM headroom on {device_name.upper()}."
 			efficiency_note = "The profile suggests the speed gain is worth the GPU cost."
 		else:
-			optimization = "int8"
+			optimization = "int8" if has_int8 else "none"
 			device = "cpu"
 			profile_note = "A CPU INT8 path gives the most stable balance between memory usage and portability."
 			efficiency_note = "It avoids assuming enough GPU headroom for half-precision execution."
+			if not has_int8:
+				profile_note = "Balanced path defaults to No-Op as INT8 plugin is missing."
 
 	recommendation = _build_recommendation(goal_v, optimization, device, profile_note, efficiency_note)
 	rationale = (

@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import os
+import anyio
 import core.system_profiler as sp
 import core.model_analyzer as ma
 import core.estimator as est
@@ -39,54 +40,58 @@ class AutotuneRequest(BaseModel):
 
 # --- API Routes ---
 @app.get("/api/system")
-def get_system():
+async def get_system():
     try:
-        profile = sp.get_system_profile()
+        # System profiling is usually fast but involves subprocesses/IORegistry on Darwin
+        profile = await anyio.to_thread.run_sync(sp.get_system_profile)
         return {"status": "success", "profile": profile}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/model/analyze")
-def analyze_model_endpoint(req: AnalyzeRequest):
+async def analyze_model_endpoint(req: AnalyzeRequest):
     if not os.path.exists(req.model_path):
         raise HTTPException(status_code=404, detail="Model path not found")
     try:
-        model_obj = load_model_from_path(req.model_path, unsafe_load=req.unsafe_load)
-        analysis = ma.analyze_model(model_obj)
+        model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
+        analysis = await anyio.to_thread.run_sync(ma.analyze_model, model_obj)
         return {"status": "success", "analysis": analysis}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/optimize/baseline")
-def estimate_baseline(req: BaselineRequest):
+async def estimate_baseline(req: BaselineRequest):
     try:
-        model_obj = load_model_from_path(req.model_path, unsafe_load=False)
-        baseline = est.estimate_performance(model_obj, req.system_profile)
+        model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, False)
+        baseline = await anyio.to_thread.run_sync(est.estimate_performance, model_obj, req.system_profile)
         return {"status": "success", "baseline": baseline}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/optimize/strategy")
-def generate_strategy(req: StrategyRequest):
+async def generate_strategy(req: StrategyRequest):
     try:
-        strategy = se.get_strategy(req.system_profile, req.goal, req.model_analysis)
+        # Strategy calculation is pure logic, but we run in thread for consistency
+        strategy = await anyio.to_thread.run_sync(se.get_strategy, req.system_profile, req.goal, req.model_analysis)
         return {"status": "success", "strategy": strategy}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/prompt/optimize")
-def optimize_prompt(req: PromptRequest):
+async def optimize_prompt(req: PromptRequest):
     try:
-        result = po.optimize_prompt(req.prompt, req.intent)
+        result = await anyio.to_thread.run_sync(po.optimize_prompt, req.prompt, req.intent)
         return {"status": "success", "result": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/optimize/autotune")
-def autotune_endpoint(req: AutotuneRequest):
+async def autotune_endpoint(req: AutotuneRequest):
     try:
-        model_obj = load_model_from_path(req.model_path, unsafe_load=req.unsafe_load)
-        best_config, _, best_result = at.autotune(model_obj, req.system_profile, req.goal)
+        model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
+        # Autotune now internally uses a ThreadPool for candidates, 
+        # but we wrap the whole call in run_sync to keep the FastAPI event loop free.
+        best_config, _, best_result = await anyio.to_thread.run_sync(at.autotune, model_obj, req.system_profile, req.goal)
         return {
             "status": "success", 
             "best_config": best_config,
@@ -100,7 +105,7 @@ if os.path.exists("frontend/dist"):
     app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
 else:
     @app.get("/")
-    def index():
+    async def index():
         return {
             "message": "API is running. However, the React frontend is not built yet.",
             "instructions": "Navigate to /frontend and run 'npm install' then 'npm run build'."

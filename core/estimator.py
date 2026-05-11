@@ -72,10 +72,46 @@ def _get_batch_size(profile: dict[str, Any]) -> int:
 	return 1
 
 
-def _build_dummy_input(batch_size: int) -> Any:
+def _get_model_input_shape(model: Any) -> tuple[int, ...]:
+	"""
+	Heuristically determines the expected input shape for a torch model.
+	Defaults to (1, 16) if detection fails.
+	"""
+	if torch is None:
+		return (1, 16)
+
+	try:
+		# Check for common layer types to infer input size
+		for module in model.modules():
+			if isinstance(module, torch.nn.Linear):
+				return (1, int(module.in_features))
+			if isinstance(module, (torch.nn.Conv1d, torch.nn.Conv2d, torch.nn.Conv3d)):
+				# Return batch=1, then the correct number of channels
+				return (1, int(module.in_channels), 224, 224) if isinstance(module, torch.nn.Conv2d) else (1, int(module.in_channels), 224)
+	except Exception:
+		pass
+	
+	# Fallback for LLMs (often use hidden_size 768, 1024, 4096)
+	# Many transformers models have a 'config' with hidden_size
+	if hasattr(model, "config"):
+		hidden = getattr(model.config, "hidden_size", 768)
+		return (1, 1, int(hidden)) # (Batch, Seq, Hidden)
+		
+	return (1, 16)
+
+
+def _build_dummy_input(model: Any, batch_size: int) -> Any:
 	if torch is None:
 		return None
-	return torch.zeros(batch_size, 16)
+	
+	shape = list(_get_model_input_shape(model))
+	shape[0] = batch_size # Override batch size based on hardware profile
+	
+	try:
+		# Create zeros of the detected shape
+		return torch.zeros(*shape)
+	except Exception:
+		return torch.zeros(batch_size, 16)
 
 
 def _run_micro_benchmark(model: Any, profile: dict[str, Any]) -> tuple[tuple[float, float], float, str]:
@@ -93,7 +129,7 @@ def _run_micro_benchmark(model: Any, profile: dict[str, Any]) -> tuple[tuple[flo
 			device_name = "mps"
 	device = torch.device(device_name)
 
-	input_tensor = _build_dummy_input(_get_batch_size(profile))
+	input_tensor = _build_dummy_input(model, _get_batch_size(profile))
 	if input_tensor is None:
 		raise RuntimeError("Unable to build dummy input")
 

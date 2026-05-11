@@ -62,6 +62,22 @@ python server.py
 # API documentation available at http://localhost:8000/docs
 ```
 
+## 🐳 Docker Deployment
+
+The project is containerized for easy deployment, including both the React frontend and FastAPI backend.
+
+### Using Docker Compose
+```bash
+docker-compose up --build
+```
+The application will be available at `http://localhost:8000`.
+
+### Manual Build
+```bash
+docker build -t ml-optimizer .
+docker run -p 8000:8000 ml-optimizer
+```
+
 ## Developer Usage & Testing
 
 SysAware maintains a rigorous quality standard with comprehensive test coverage.
@@ -74,9 +90,7 @@ pytest tests/
 
 ## Future Enhancements (Roadmap)
 
-- **Safetensors Integration**: Transition from pickle-based `.pt` files to `safetensors` for inherently secure, zero-code-execution model loading.
 - **MLOps Connectivity**: Native integration with MLflow and Weights & Biases for experiment tracking and optimization logging.
-- **Dockerization**: Containerize the FastAPI and Streamlit services for seamless cloud deployment via Kubernetes or GCP/AWS.
 - **Advanced Profiling**: Implementation of `torch.profiler` for deeper kernel-level performance analysis during benchmarks.
 
 ## License

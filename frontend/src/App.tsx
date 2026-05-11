@@ -24,13 +24,23 @@ import { cn } from './lib/utils';
 
 const GlassCard = ({ children, className, delay = 0 }: { children: React.ReactNode, className?: string, delay?: number }) => (
   <motion.div
-    initial={{ opacity: 0, y: 20 }}
+    initial={{ opacity: 0, y: 12 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.8, delay, ease: [0.16, 1, 0.3, 1] }}
-    className={cn("glass glass-hover rounded-3xl p-8 relative overflow-hidden group transition-all duration-500", className)}
+    transition={{ duration: 0.4, delay, ease: [0.23, 1, 0.32, 1] }}
+    className={cn("glass glass-hover rounded-3xl p-8 relative overflow-hidden group transition-all duration-300", className)}
   >
     {children}
   </motion.div>
+);
+
+const SkeletonItem = () => (
+  <div className="flex justify-between items-center bg-white/[0.01] p-4 rounded-2xl border border-white/5 animate-pulse">
+    <div className="flex items-center gap-3">
+      <div className="w-3.5 h-3.5 rounded-md bg-white/5" />
+      <div className="w-20 h-2 bg-white/5 rounded" />
+    </div>
+    <div className="w-16 h-3 bg-white/5 rounded" />
+  </div>
 );
 
 const Badge = ({ children, color = "primary" }: { children: React.ReactNode, color?: "primary" | "accent" | "purple" }) => {
@@ -172,8 +182,9 @@ export default function App() {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
+                aria-label={`Switch to ${tab} view`}
                 className={cn(
-                  "px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-300",
+                  "px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-300 outline-none focus:ring-2 focus:ring-white/20",
                   activeTab === tab 
                     ? "bg-white text-black shadow-lg shadow-white/10" 
                     : "text-white/40 hover:text-white/70"
@@ -196,27 +207,41 @@ export default function App() {
                   </div>
                   <div>
                     <h2 className="text-sm font-black uppercase tracking-widest text-white/90">System Node</h2>
-                    <p className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Host Telemetry</p>
+                    <p className="text-[10px] text-white/50 uppercase font-bold tracking-wider">Host Telemetry</p>
                   </div>
                 </div>
                 {systemProfile && (
-                  <button onClick={fetchSystem} disabled={loading.system} className="text-white/20 hover:text-white/50 transition-colors">
+                  <button 
+                    onClick={fetchSystem} 
+                    disabled={loading.system} 
+                    aria-label="Refresh hardware telemetry"
+                    className="p-3 -m-3 text-white/20 hover:text-white/50 transition-colors outline-none focus:ring-2 focus:ring-white/10 rounded-full"
+                  >
                     <RefreshCw size={14} className={cn(loading.system && "animate-spin")} />
                   </button>
                 )}
               </div>
 
               <div className="max-h-[380px] overflow-y-auto pr-2 custom-scrollbar space-y-3">
-                {!systemProfile ? (
+                {loading.system ? (
+                  <>
+                    <SkeletonItem />
+                    <SkeletonItem />
+                    <SkeletonItem />
+                    <SkeletonItem />
+                    <SkeletonItem />
+                  </>
+                ) : !systemProfile ? (
                   <button 
                     onClick={fetchSystem}
                     disabled={loading.system}
-                    className="w-full py-16 border-2 border-dashed border-white/10 rounded-3xl flex flex-col items-center justify-center gap-4 group hover:border-white/20 transition-all"
+                    aria-label="Start hardware diagnostic scan"
+                    className="w-full py-16 border-2 border-dashed border-white/10 rounded-3xl flex flex-col items-center justify-center gap-4 group hover:border-white/20 transition-all outline-none focus:ring-2 focus:ring-cyan-500/20"
                   >
                     <div className={cn("w-12 h-12 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-white/5", loading.system && "animate-spin")}>
-                      <Cpu size={20} className="text-white/40" />
+                      <Cpu size={20} className="text-white/50" />
                     </div>
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30">Initiate Hardware Scan</span>
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Initiate Hardware Scan</span>
                   </button>
                 ) : (
                   <>
@@ -254,21 +279,22 @@ export default function App() {
                 </div>
                 <div>
                   <h2 className="text-sm font-black uppercase tracking-widest text-white/90">Payload</h2>
-                  <p className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Architecture Input</p>
+                  <p className="text-[10px] text-white/50 uppercase font-bold tracking-wider">Architecture Input</p>
                 </div>
               </div>
 
               <div className="space-y-6">
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-2">Model Path (.pt/.pth)</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-2" htmlFor="model-path">Model Path (.pt/.pth)</label>
                   <div className="relative">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} aria-hidden="true" />
                     <input 
+                      id="model-path"
                       type="text"
                       value={modelPath}
                       onChange={(e) => setModelPath(e.target.value)}
                       placeholder="/models/vision_transformer.pt"
-                      className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-sm font-mono focus:outline-none focus:border-[#E8ff00]/50 transition-all"
+                      className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#E8ff00]/30 focus:border-[#E8ff00]/50 transition-all"
                     />
                   </div>
                 </div>
@@ -276,7 +302,8 @@ export default function App() {
                 <button 
                   onClick={analyzeModel}
                   disabled={loading.model || !modelPath}
-                  className="w-full group relative py-4 bg-white text-black rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] overflow-hidden transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                  aria-label="Execute architecture analysis"
+                  className="w-full group relative py-4 bg-white text-black rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] overflow-hidden transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 outline-none focus:ring-2 focus:ring-white/20"
                 >
                   <span className="relative z-10">{loading.model ? 'Synthesizing...' : 'Load & Analyze'}</span>
                   <div className="absolute inset-0 bg-gradient-to-r from-indigo-400 to-cyan-300 opacity-0 group-hover:opacity-100 transition-opacity" />
