@@ -8,6 +8,7 @@ import core.model_analyzer as ma
 import core.estimator as est
 import core.strategy_engine as se
 import core.prompt_optimizer as po
+from main import load_model_from_path
 
 app = FastAPI(title="SysAware ML Optimizer API")
 
@@ -43,7 +44,7 @@ def analyze_model_endpoint(req: AnalyzeRequest):
     if not os.path.exists(req.model_path):
         raise HTTPException(status_code=404, detail="Model path not found")
     try:
-        model_obj = ma.load_model_from_path(req.model_path, unsafe_load=req.unsafe_load)
+        model_obj = load_model_from_path(req.model_path, unsafe_load=req.unsafe_load)
         analysis = ma.analyze_model(model_obj)
         return {"status": "success", "analysis": analysis}
     except Exception as e:
@@ -52,7 +53,7 @@ def analyze_model_endpoint(req: AnalyzeRequest):
 @app.post("/api/optimize/baseline")
 def estimate_baseline(req: BaselineRequest):
     try:
-        model_obj = ma.load_model_from_path(req.model_path, unsafe_load=False)
+        model_obj = load_model_from_path(req.model_path, unsafe_load=False)
         baseline = est.estimate_performance(model_obj, req.system_profile)
         return {"status": "success", "baseline": baseline}
     except Exception as e:

@@ -13,6 +13,7 @@ Whether deployed via the integrated Streamlit GUI or strictly typed through the 
 - **Intelligent Prompt Optimizer Engine**: A decoupled heuristic compiler that evaluates instruction prompts natively against `Task/Goal` dictionaries—targeting and recursively stripping semantic stop-words ("can you please", "I want you to") while restructuring the remaining text into formatted templates.
 - **Fault-Tolerant CLI Envelope**: Wraps critical execution hooks inside resilient exception blocks, delivering formatted JSON packets (HTTP 500 equivalent) on runtime failure for integration via Subprocess or CI wrappers.
 - **OctaWipe Streamlit Interface**: An optimized, cached, rapid user-interface eliminating stale state anomalies across continuous session executions.
+- **RESTful API Backend**: A high-performance FastAPI server providing programmatic access to system profiling, model analysis, and prompt optimization endpoints.
 
 ## Installation
 
@@ -30,46 +31,53 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Quickstart (CLI)
+## Usage
 
-SysAware exposes a centralized pipeline encompassing the entire workflow via `main.py`. 
+SysAware provides three primary interfaces for interaction.
+
+### 1. Enterprise CLI (`main.py`)
+The centralized pipeline for model analysis and optimization.
 
 ```bash
-# Run a memory-centric optimization path over a standard model
-python main.py --model-path ./models/resnet50.pt --goal memory
+# Run memory optimization and return JSON results
+python main.py --model-path ./models/resnet50.pt --goal memory --json
 
-# Return results strictly formatted as JSON (useful for backend pipelines)
-python main.py --model-path ./models/transformer.pth --goal balanced --json
-
-# Enable prompt optimization along with performance profiling
-python main.py --model-path ./models/bert.pt --goal balanced \
-               --optimize-prompt \
-               --prompt-text "Please can you write a python script that summarizes this?" \
-               --prompt-type coding
-
-If you need to load a trusted full-module checkpoint instead of a weights-only file, use `--unsafe-load` on the CLI or the corresponding GUI toggle.
+# Optimize a prompt with intent hints
+python main.py --model-path ./models/bert.pt --optimize-prompt \
+               --prompt-text "Please summarize this code." --prompt-type coding
 ```
 
-## Quickstart (GUI)
-
-The interactive browser application is built natively on Streamlit.
+### 2. Interactive GUI (`gui/app.py`)
+A polished Streamlit application for real-time visualization of hardware-aware optimizations.
 
 ```bash
 streamlit run gui/app.py
 ```
 
-## Developer Usage & Testing
-
-SysAware enforces comprehensive coverage paths spanning the `core`, `gui`, and `cli` boundaries.
+### 3. REST API (`server.py`)
+Deploy the optimizer as a microservice using FastAPI.
 
 ```bash
-# Execute the full pytest regressions
-python -m pytest
-
-# Run isolated phases explicitly
-python -m pytest tests/test_optimizer.py
-python -m pytest tests/test_prompt_optimizer.py
+python server.py
+# API documentation available at http://localhost:8000/docs
 ```
+
+## Developer Usage & Testing
+
+SysAware maintains a rigorous quality standard with comprehensive test coverage.
+
+```bash
+# Execute the full suite of 200+ regression tests
+export PYTHONPATH=.
+pytest tests/
+```
+
+## Future Enhancements (Roadmap)
+
+- **Safetensors Integration**: Transition from pickle-based `.pt` files to `safetensors` for inherently secure, zero-code-execution model loading.
+- **MLOps Connectivity**: Native integration with MLflow and Weights & Biases for experiment tracking and optimization logging.
+- **Dockerization**: Containerize the FastAPI and Streamlit services for seamless cloud deployment via Kubernetes or GCP/AWS.
+- **Advanced Profiling**: Implementation of `torch.profiler` for deeper kernel-level performance analysis during benchmarks.
 
 ## License
 
