@@ -23,6 +23,7 @@ from core.utils import calculate_model_hash
 from core.memoization import get_cached_strategy, save_strategy_to_cache
 from core.autodiscovery import discover_server
 from core.tui import SysAwareTUI, render_final_table, Live
+from core.exporter import export_deployment_artifacts
 
 
 logger = get_logger("sysaware.cli")
@@ -165,6 +166,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 	parser.add_argument(
 		"--server",
 		help="URL of the central SysAware server for fleet telemetry (e.g. http://192.168.1.10:8000)",
+	)
+	parser.add_argument(
+		"--export-deploy",
+		action="store_true",
+		help="Generate production-ready deployment artifacts (Dockerfile, runner, systemd) in the deploy/ directory",
 	)
 	return parser.parse_args(argv)
 
@@ -437,6 +443,14 @@ def main(argv: list[str] | None = None) -> int:
 		print(json.dumps(report, indent=2, default=str))
 	else:
 		print_human_report(report)
+		
+	if args.export_deploy:
+		deploy_path = export_deployment_artifacts(report)
+		logger.info(f"Deployment artifacts generated at: {deploy_path}")
+		if not args.json:
+			from rich.panel import Panel
+			from core.tui import console
+			console.print(Panel(f"[bold green]✓ Deployment Artifacts Exported[/]\\nLocation: [cyan]{deploy_path}[/]", title="Export-to-Deploy", border_style="green"))
 
 	return 0
 
