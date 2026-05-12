@@ -1,97 +1,115 @@
 # SysAware ML Optimizer
 
-SysAware ML Optimizer is an advanced, hardware-aware tool designed to dynamically profile, compress, and accelerate PyTorch models based on the host system's physical capabilities (CPU, RAM, CUDA VRAM, and Apple Silicon MPS). 
+SysAware ML Optimizer is an advanced, hardware-aware toolkit designed to dynamically profile, compress, and accelerate PyTorch models based on the host system's physical capabilities (CPU, RAM, CUDA VRAM, Apple Silicon MPS, and NPUs).
 
-Whether deployed via the integrated Streamlit GUI or strictly typed through the Enterprise CLI payload formats, SysAware bridges the gap between deep learning infrastructure and production optimization—assessing latency constraints, dynamically estimating intermediate activation footprints, and autotuning INT8/FP16 models.
+The project has recently evolved into a **distributed, real-time telemetry and benchmarking suite**. It goes beyond static optimization, offering Server-Sent Events (SSE) streaming, live UI updates, real-world LLM/SLM token-speed metrics, and fleet-wide telemetry over LAN.
 
 ## Key Features
 
-- **Security-First Model Loading**: Mitigates arbitrary code execution vulnerabilities during serialization by strictly enforcing `torch.load(..., weights_only=True)`. Legacy pickle-bound execution can only be instantiated with the explicit `--unsafe-load` flag.
-- **Dynamic Hardware Tiering**: Replaces hardcoded tier rules with algorithmic checks mapping model sizes against accessible memory ratios, robustly shifting between CPU, GPU, and Apple Silicon MPS domains.
-- **Comprehensive Benchmarking Mechanic**: Uses `tracemalloc` internally to measure actual intermediate tensors footprints seamlessly, cutting off benchmarks dynamically once inferences reach a tight coefficient of variance (CoV < 5%).
-- **Extended INT8 Quantization**: Automatically traverses nested layer blocks and dynamically compresses structural networks including `Conv1d`, `Conv2d`, `Conv3d`, `LSTM`, and `GRU` operations alongside standard `Linear` perceptrons.
-- **Intelligent Prompt Optimizer Engine**: A decoupled heuristic compiler that evaluates instruction prompts natively against `Task/Goal` dictionaries—targeting and recursively stripping semantic stop-words ("can you please", "I want you to") while restructuring the remaining text into formatted templates.
-- **Fault-Tolerant CLI Envelope**: Wraps critical execution hooks inside resilient exception blocks, delivering formatted JSON packets (HTTP 500 equivalent) on runtime failure for integration via Subprocess or CI wrappers.
-- **OctaWipe Streamlit Interface**: An optimized, cached, rapid user-interface eliminating stale state anomalies across continuous session executions.
-- **RESTful API Backend**: A high-performance FastAPI server providing programmatic access to system profiling, model analysis, and prompt optimization endpoints.
+- **Distributed Fleet Telemetry**: Multiple instances of the SysAware CLI can automatically discover and connect to a central telemetry server over the local network via UDP broadcast, posting their hardware profiles and optimization metrics.
+- **Real-Time React Dashboard**: A modern React/Vite frontend consuming live Server-Sent Events (SSE) from the backend. Watch metrics update instantly as worker nodes evaluate models.
+- **Inference Benchmarking (Token/sec)**: Accurately measures LLM/SLM token-generation speeds (Time-To-First-Token, Decode Speed) using real datasets.
+- **Security-First Model Loading**: Mitigates arbitrary code execution vulnerabilities during serialization by strictly enforcing `torch.load(..., weights_only=True)`. Unsafe loading requires explicit flags (`--unsafe-load`).
+- **Dynamic Hardware Tiering**: Algorithmic hardware assessment maps model sizes against system memory to seamlessly shift between CPU, GPU, and Apple Silicon domains.
+- **RESTful API Backend & SQLite**: A high-performance FastAPI server providing endpoints for live streaming, fleet autodiscovery, and telemetry ingestion backed by a persistent SQLite database.
+- **OctaWipe Streamlit GUI**: An optimized real-time interface eliminating stale state memory anomalies across continuous testing sessions, including one-click "Unload Model" memory reclamation.
+
+---
 
 ## Installation
 
-Ensure you are running **Python 3.9+** and have PyTorch configured for your specific compute hardware.
+Ensure you are running **Python 3.9+** and have **Node.js 18+** installed for the frontend dashboard. PyTorch should be installed and configured for your specific compute hardware.
 
+### 1. Clone the Repository
 ```bash
 git clone https://github.com/gaminbhoot/sysaware-ml-optimizer.git
 cd sysaware-ml-optimizer
+```
 
-# Recommended: Enable a virtual environment
+### 2. Backend Setup (Python)
+We strongly recommend using a virtual environment:
+```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install requirements
+# Install all Python dependencies
 pip install -r requirements.txt
 ```
 
-## Usage
-
-SysAware provides three primary interfaces for interaction.
-
-### 1. Enterprise CLI (`main.py`)
-The centralized pipeline for model analysis and optimization.
-
+### 3. Frontend Setup (React/Node)
+Navigate to the frontend directory and install the required NPM packages:
 ```bash
-# Run memory optimization and return JSON results
-python main.py --model-path ./models/resnet50.pt --goal memory --json
-
-# Optimize a prompt with intent hints
-python main.py --model-path ./models/bert.pt --optimize-prompt \
-               --prompt-text "Please summarize this code." --prompt-type coding
+cd frontend
+npm install
 ```
 
-### 2. Interactive GUI (`gui/app.py`)
-A polished Streamlit application for real-time visualization of hardware-aware optimizations.
+---
 
+## How to Interact with SysAware
+
+The SysAware ML Optimizer provides multiple interconnected components. For the full distributed experience, run the Server, the React UI, and a CLI worker simultaneously.
+
+### 1. Start the Telemetry Server (FastAPI)
+The central hub for data ingestion, SSE streaming, and SQLite persistence.
+```bash
+# From the project root
+python server.py
+# The server will run on http://0.0.0.0:8000
+# UDP Autodiscovery will also activate on port 8001
+```
+
+### 2. Start the Live Telemetry Dashboard (React)
+A beautiful, responsive UI to monitor fleet telemetry and live optimization streams.
+```bash
+# In a new terminal, from the /frontend directory
+npm run dev
+# Open the dashboard at http://localhost:5173
+```
+
+### 3. Run a CLI Worker Node (`main.py`)
+Run the optimizer on a model. It will use UDP autodiscovery to find the FastAPI server and stream its metrics live to the React dashboard.
+```bash
+# Optimize a model and broadcast metrics to the fleet
+python main.py --model-path ./models/resnet50.pt --goal balanced
+
+# If UDP autodiscovery fails across subnets, you can manually point it:
+python main.py --model-path ./models/resnet50.pt --goal balanced --server http://localhost:8000
+```
+
+### 4. Interactive Sandbox GUI (`gui/app.py`)
+If you want a standalone, interactive web UI to experiment with specific optimizations and prompt-engineering without joining the telemetry fleet:
 ```bash
 streamlit run gui/app.py
 ```
 
-### 3. REST API (`server.py`)
-Deploy the optimizer as a microservice using FastAPI.
-
-```bash
-python server.py
-# API documentation available at http://localhost:8000/docs
-```
+---
 
 ## 🐳 Docker Deployment
 
-The project is containerized for easy deployment, including both the React frontend and FastAPI backend.
+The project is fully containerized, simplifying deployment across different environments.
 
 ### Using Docker Compose
 ```bash
 docker-compose up --build
 ```
-The application will be available at `http://localhost:8000`.
+This single command spins up both the FastAPI backend and the React frontend.
 
-### Manual Build
-```bash
-docker build -t ml-optimizer .
-docker run -p 8000:8000 ml-optimizer
-```
+---
 
 ## Developer Usage & Testing
 
-SysAware maintains a rigorous quality standard with comprehensive test coverage.
+SysAware maintains a rigorous quality standard with 200+ regression tests.
 
 ```bash
-# Execute the full suite of 200+ regression tests
-export PYTHONPATH=.
-pytest tests/
+# Ensure you are in the Python virtual environment
+python -m pytest -q
 ```
 
 ## Future Enhancements (Roadmap)
 
-- **MLOps Connectivity**: Native integration with MLflow and Weights & Biases for experiment tracking and optimization logging.
-- **Advanced Profiling**: Implementation of `torch.profiler` for deeper kernel-level performance analysis during benchmarks.
+- **MLOps Connectivity**: Native integration with MLflow and Weights & Biases for experiment tracking.
+- **Advanced Profiling**: Implementing `torch.profiler` for deep kernel-level performance analysis.
+- **Agentic AI Orchestration**: Continuing the path outlined in `planned_integrations.md`.
 
 ## License
 
