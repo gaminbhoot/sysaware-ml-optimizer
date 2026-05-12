@@ -42,15 +42,33 @@ export const ModelAnalysis = () => {
         <div className="col-span-1 md:col-span-8 flex flex-col gap-8">
           <div className="glass-card p-8 flex flex-col gap-4">
             <label className="text-luxury-mono">Model Path</label>
-            <div className="relative">
-              <input
-                type="text"
-                value={modelPath}
-                onChange={(e) => setModelPath(e.target.value)}
-                placeholder="/path/to/model.pt"
-                className="w-full bg-black/50 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white font-mono focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/30 transition-all"
-              />
-              <Database className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" size={18} />
+            <div className="relative flex gap-4">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={modelPath}
+                  onChange={(e) => setModelPath(e.target.value)}
+                  placeholder="/path/to/model.pt"
+                  className="w-full bg-black/50 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white font-mono focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/30 transition-all"
+                />
+                <Database className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" size={18} />
+              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/model/browse');
+                    const data = await res.json();
+                    if (data.status === 'success' && data.path) {
+                      setModelPath(data.path);
+                    }
+                  } catch (e) {
+                    console.error('Browse failed', e);
+                  }
+                }}
+                className="px-6 py-4 rounded-xl bg-white/5 border border-white/10 text-white font-mono text-xs tracking-widest uppercase hover:bg-white/10 transition-all"
+              >
+                Browse
+              </button>
             </div>
             <button
               onClick={analyzeModel}
@@ -77,20 +95,20 @@ export const ModelAnalysis = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-black/40 p-4 rounded-xl border border-white/5">
                   <div className="text-white/40 text-[10px] uppercase font-bold tracking-widest mb-1">Total Parameters</div>
-                  <div className="font-mono text-xl text-emerald">{modelAnalysis.total_parameters.toLocaleString()}</div>
+                  <div className="font-mono text-xl text-emerald">{(modelAnalysis.num_params || 0).toLocaleString()}</div>
                 </div>
                 <div className="bg-black/40 p-4 rounded-xl border border-white/5">
                   <div className="text-white/40 text-[10px] uppercase font-bold tracking-widest mb-1">Total Size</div>
-                  <div className="font-mono text-xl text-white">{(modelAnalysis.total_size_mb).toFixed(2)} MB</div>
+                  <div className="font-mono text-xl text-white">{(modelAnalysis.size_mb || 0).toFixed(2)} MB</div>
                 </div>
                 <div className="bg-black/40 p-4 rounded-xl border border-white/5 col-span-2">
                   <div className="text-white/40 text-[10px] uppercase font-bold tracking-widest mb-2">Layer Composition</div>
                   <div className="flex flex-wrap gap-2">
-                    {Object.entries(modelAnalysis.layer_types).map(([type, count]) => (
+                    {modelAnalysis.layer_types ? Object.entries(modelAnalysis.layer_types).map(([type, count]) => (
                       <span key={type} className="px-3 py-1 bg-white/5 rounded-md font-mono text-xs text-white/70">
                         {type}: <span className="text-white">{count as any}</span>
                       </span>
-                    ))}
+                    )) : <span className="text-white/20 text-xs italic">No layer data available</span>}
                   </div>
                 </div>
               </div>

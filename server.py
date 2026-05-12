@@ -48,6 +48,37 @@ async def get_system():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/model/browse")
+async def browse_model():
+    try:
+        if sys.platform == "darwin":
+            # Using anyio.to_thread.run_sync to avoid blocking the event loop
+            def run_osascript():
+                return subprocess.run(
+                    ['osascript', '-e', 'POSIX path of (choose file with prompt "Select PyTorch Model:")'],
+                    capture_output=True, text=True
+                )
+            result = await anyio.to_thread.run_sync(run_osascript)
+            file_path = result.stdout.strip()
+            return {"status": "success", "path": file_path}
+        else:
+            def tk_browse():
+                try:
+                    import tkinter as tk
+                    from tkinter import filedialog
+                    root = tk.Tk()
+                    root.withdraw()
+                    root.wm_attributes('-topmost', 1)
+                    file_path = filedialog.askopenfilename(master=root, filetypes=[("PyTorch Models", "*.pt *.pth"), ("All Files", "*.*")])
+                    root.destroy()
+                    return file_path
+                except Exception:
+                    return ""
+            file_path = await anyio.to_thread.run_sync(tk_browse)
+            return {"status": "success", "path": file_path}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
 @app.post("/api/model/analyze")
 async def analyze_model_endpoint(req: AnalyzeRequest):
     if not os.path.exists(req.model_path):

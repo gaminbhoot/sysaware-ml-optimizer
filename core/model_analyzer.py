@@ -83,6 +83,7 @@ def analyze_model(model: Any) -> ModelAnalysis:
 	total_params = 0
 	trainable_params = 0
 	size_mb = 0.0
+	layer_types: dict[str, int] = {}
 
 	if hasattr(model, "parameters"):
 		try:
@@ -109,6 +110,15 @@ def analyze_model(model: Any) -> ModelAnalysis:
 		_, buffer_size_mb = _sum_tensor_collection(buffers)
 		size_mb += buffer_size_mb
 
+		# Track layer types if it's a torch.nn.Module
+		if hasattr(model, "modules"):
+			try:
+				for m in model.modules():
+					m_type = m.__class__.__name__
+					layer_types[m_type] = layer_types.get(m_type, 0) + 1
+			except Exception:
+				pass
+
 	elif isinstance(model, Mapping):
 		for value in model.values():
 			value_params, value_size = _sum_nested_tensors(value)
@@ -133,5 +143,6 @@ def analyze_model(model: Any) -> ModelAnalysis:
 		"num_params": int(total_params),
 		"trainable_params": int(trainable_params),
 		"size_mb": float(size_mb),
+		"layer_types": layer_types,
 	}
 	return analysis

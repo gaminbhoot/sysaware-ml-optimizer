@@ -46,7 +46,7 @@ export const Results = () => {
             </div>
             <div>
               <div className="text-luxury-mono text-white/40">Selected Device</div>
-              <div className="font-sans font-bold text-2xl text-white uppercase">{strategy.target_device}</div>
+              <div className="font-sans font-bold text-2xl text-white uppercase">{strategy.device || 'CPU'}</div>
             </div>
           </div>
 
@@ -54,12 +54,22 @@ export const Results = () => {
             <div>
               <h3 className="text-luxury-mono mb-4">Recommended Actions</h3>
               <ul className="space-y-3">
-                {strategy.recommended_optimizations.map((opt: string, i: number) => (
-                  <li key={i} className="flex items-start gap-3">
+                <li className="flex items-start gap-3">
+                  <span className="text-emerald mt-0.5">■</span>
+                  <span className="font-mono text-sm text-white/80 leading-relaxed">
+                    Apply <strong className="text-white">{strategy.optimization?.toUpperCase()}</strong> optimization.
+                  </span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-emerald mt-0.5">■</span>
+                  <span className="font-mono text-sm text-white/80 leading-relaxed">{strategy.recommendation}</span>
+                </li>
+                {strategy.rationale && (
+                  <li className="flex items-start gap-3">
                     <span className="text-emerald mt-0.5">■</span>
-                    <span className="font-mono text-sm text-white/80 leading-relaxed">{opt}</span>
+                    <span className="font-mono text-xs text-white/40 leading-relaxed italic">{strategy.rationale}</span>
                   </li>
-                ))}
+                )}
               </ul>
             </div>
             

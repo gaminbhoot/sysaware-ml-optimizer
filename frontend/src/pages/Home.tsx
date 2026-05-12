@@ -11,7 +11,7 @@ export const Home = () => {
 
     const handleWheel = (e: WheelEvent) => {
       // Trigger navigation on a significant downward scroll
-      if (e.deltaY > 30) {
+      if (e.deltaY > 50) {
         navigate('/profiler');
       }
     };
@@ -23,7 +23,7 @@ export const Home = () => {
     const handleTouchMove = (e: TouchEvent) => {
       const touchEndY = e.touches[0].clientY;
       // Trigger navigation on an upward swipe (scrolling down the page)
-      if (touchStartY - touchEndY > 40) {
+      if (touchStartY - touchEndY > 80) {
         navigate('/profiler');
       }
     };

@@ -65,12 +65,12 @@ export const Profiler = () => {
             </div>
           ) : systemProfile ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <StatCard label="Platform" value={`${systemProfile.system} ${systemProfile.machine}`} icon={Monitor} delay={0.1} />
-              <StatCard label="CPU Cores" value={systemProfile.cpu_count} icon={Cpu} delay={0.2} />
-              <StatCard label="Total RAM" value={`${(systemProfile.ram_total_gb).toFixed(1)} GB`} icon={HardDrive} delay={0.3} />
+              <StatCard label="Platform" value={systemProfile.os || 'Unknown'} icon={Monitor} delay={0.1} />
+              <StatCard label="CPU Cores" value={systemProfile.cpu_cores || 0} icon={Cpu} delay={0.2} />
+              <StatCard label="Total RAM" value={`${(systemProfile.ram_gb || 0).toFixed(1)} GB`} icon={HardDrive} delay={0.3} />
               <StatCard 
                 label="Accelerator" 
-                value={systemProfile.cuda_available ? 'CUDA' : systemProfile.mps_available ? 'MPS' : 'CPU Only'} 
+                value={systemProfile.gpu_available ? (systemProfile.gpu_backend || 'Generic').toUpperCase() : 'CPU Only'} 
                 icon={Activity} 
                 delay={0.4} 
               />

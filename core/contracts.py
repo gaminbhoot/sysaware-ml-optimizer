@@ -34,6 +34,7 @@ class ModelAnalysis(TypedDict):
     num_params: int
     trainable_params: int
     size_mb: float
+    layer_types: Dict[str, int]
 
 
 class PerformanceEstimate(TypedDict):

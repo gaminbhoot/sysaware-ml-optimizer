@@ -1,5 +1,5 @@
 import re
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 # Advanced Prompt Engineering Configs V3
 INTENT_CONFIGS = {
@@ -125,10 +125,13 @@ def build_suggestions(prompt: str) -> List[str]:
 
     return suggestions
 
-def _remove_filler_words(text: str) -> str:
-    filler_pattern = r"(?i)^(please\s+can\s+you\s+|can\s+you\s+|please\s+|could\s+you\s+|i\s+want\s+you\s+to\s+|kindly\s+)|(\s+(please|kindly)\s+)"
+def _remove_filler_words(text: str) -> Tuple[str, List[str]]:
+    filler_pattern = r"(?i)\b(please\s+can\s+you\s+|can\s+you\s+|please\s+|could\s+you\s+|i\s+want\s+you\s+to\s+|kindly\s+)\b|\b(please|kindly)\b"
+    removed = re.findall(filler_pattern, text)
+    # Flatten and clean the found matches
+    removed_list = [m[0] or m[1] for m in removed if m[0] or m[1]]
     cleaned = re.sub(filler_pattern, " ", text).strip()
-    return cleaned
+    return cleaned, removed_list
 
 def optimize_prompt(user_prompt: str, intent: str = "general") -> Dict[str, object]:
     normalized = _normalize_spaces(user_prompt)
@@ -137,11 +140,12 @@ def optimize_prompt(user_prompt: str, intent: str = "general") -> Dict[str, obje
             "original_prompt": user_prompt,
             "optimized_prompt": "",
             "suggestions": ["Enter a prompt to optimize."],
+            "removed_words": [],
             "before_score": 0,
             "after_score": 0,
         }
     
-    cleaned_prompt = _remove_filler_words(normalized)
+    cleaned_prompt, removed_words = _remove_filler_words(normalized)
     cleaned_prompt = _normalize_spaces(cleaned_prompt)
 
     intent_key = intent if intent in INTENT_CONFIGS else "general"
@@ -172,6 +176,7 @@ def optimize_prompt(user_prompt: str, intent: str = "general") -> Dict[str, obje
         "original_prompt": user_prompt,
         "optimized_prompt": optimized,
         "suggestions": suggestions,
+        "removed_words": removed_words,
         "before_score": before_score,
         "after_score": after_score,
     }

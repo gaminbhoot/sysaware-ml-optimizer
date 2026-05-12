@@ -52,7 +52,7 @@ export const Optimizer = () => {
             <div>
               <h3 className="text-luxury-mono mb-4">Optimization Target</h3>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {['latency', 'memory', 'accuracy'].map((g) => (
+                {['latency', 'memory', 'balanced'].map((g) => (
                   <button
                     key={g}
                     onClick={() => setGoal(g)}
