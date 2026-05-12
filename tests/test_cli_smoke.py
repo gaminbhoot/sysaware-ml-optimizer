@@ -92,7 +92,15 @@ def test_run_pipeline_executes_full_flow(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(main, "analyze_model", lambda model: calls.append("analyze") or {"model_name": "DummyModel", "num_params": 100, "trainable_params": 100, "size_mb": 0.38})
     monkeypatch.setattr(main, "estimate_performance", lambda model, profile: calls.append("estimate") or {"latency_range_ms": (10.0, 12.0), "memory_mb": 100.0, "confidence": "high", "method": "static"})
     monkeypatch.setattr(main, "get_strategy", lambda profile, goal, model_analysis=None: calls.append(f"strategy:{goal}") or {"optimization": "fp16", "device": "cuda", "rationale": "gpu headroom available", "recommendation": "Use FP16 on GPU."})
-    monkeypatch.setattr(main, "autotune", lambda model, profile, goal: calls.append(f"autotune:{goal}") or ({"name": "fp16", "mode": "fp16", "metadata": {"method": "fp16"}, "goal": goal, "score": 5.0, "evaluated_candidates": 3}, {"model": "optimized"}, {"latency_range_ms": (5.0, 7.0), "memory_mb": 70.0, "confidence": "high", "method": "static+micro-benchmark"}))
+    def mock_autotune_generator(*args, **kwargs):
+        goal = args[2] if len(args) > 2 else kwargs.get('goal', 'balanced')
+        calls.append(f"autotune:{goal}")
+        yield {"status": "evaluating", "candidate": "fp16"}
+        yield {"status": "complete", "best_config": {"name": "fp16", "mode": "fp16", "metadata": {"method": "fp16"}, "goal": goal, "score": 5.0, "evaluated_candidates": 3}, "best_result": {"latency_range_ms": (5.0, 7.0), "memory_mb": 70.0, "confidence": "high", "method": "static+micro-benchmark"}}
+        return ({"name": "fp16", "mode": "fp16", "metadata": {"method": "fp16"}, "goal": goal, "score": 5.0, "evaluated_candidates": 3}, {"model": "optimized"}, {"latency_range_ms": (5.0, 7.0), "memory_mb": 70.0, "confidence": "high", "method": "static+micro-benchmark"})
+    
+    import core.autotuner
+    monkeypatch.setattr(core.autotuner, "autotune_generator", mock_autotune_generator)
     monkeypatch.setattr(main, "optimize_prompt", lambda text, prompt_type: calls.append(f"prompt:{prompt_type}") or {"original_prompt": text, "optimized_prompt": text, "suggestions": ["ok"], "before_score": 10, "after_score": 80})
 
     args = main.parse_args([
@@ -120,7 +128,14 @@ def test_run_pipeline_requires_prompt_text_when_prompt_optimizer_enabled(monkeyp
     monkeypatch.setattr(main, "analyze_model", lambda model: {"model_name": "DummyModel", "num_params": 100, "trainable_params": 100, "size_mb": 0.38})
     monkeypatch.setattr(main, "estimate_performance", lambda model, profile: {"latency_range_ms": (10.0, 12.0), "memory_mb": 100.0, "confidence": "high", "method": "static"})
     monkeypatch.setattr(main, "get_strategy", lambda profile, goal, model_analysis=None: {"optimization": "int8", "device": "cpu", "rationale": "cpu fallback", "recommendation": "Use INT8."})
-    monkeypatch.setattr(main, "autotune", lambda model, profile, goal: ({"name": "int8", "mode": "int8", "metadata": {}, "goal": goal, "score": 1.0, "evaluated_candidates": 3}, {"model": "optimized"}, {"latency_range_ms": (8.0, 9.0), "memory_mb": 50.0, "confidence": "high", "method": "int8"}))
+    def mock_autotune_gen_error(*args, **kwargs):
+        goal = args[2] if len(args) > 2 else kwargs.get('goal', 'balanced')
+        yield {"status": "evaluating", "candidate": "int8"}
+        yield {"status": "complete", "best_config": {"name": "int8", "mode": "int8", "metadata": {}, "goal": goal, "score": 1.0, "evaluated_candidates": 3}, "best_result": {"latency_range_ms": (8.0, 9.0), "memory_mb": 50.0, "confidence": "high", "method": "int8"}}
+        return ({"name": "int8", "mode": "int8", "metadata": {}, "goal": goal, "score": 1.0, "evaluated_candidates": 3}, {"model": "optimized"}, {"latency_range_ms": (8.0, 9.0), "memory_mb": 50.0, "confidence": "high", "method": "int8"})
+
+    import core.autotuner
+    monkeypatch.setattr(core.autotuner, "autotune_generator", mock_autotune_gen_error)
 
     args = main.parse_args(["--model-path", "model.pt", "--optimize-prompt"])
     args.prompt_text = ""

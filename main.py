@@ -22,6 +22,7 @@ from core.validation import ValidationError, set_global_seed, validate_goal
 from core.utils import calculate_model_hash
 from core.memoization import get_cached_strategy, save_strategy_to_cache
 from core.autodiscovery import discover_server
+from core.tui import SysAwareTUI, render_final_table, Live
 
 
 logger = get_logger("sysaware.cli")
@@ -304,41 +305,7 @@ def build_report(
 
 
 def print_human_report(report: dict[str, Any]) -> None:
-	system = report["system_profile"]
-	model = report["model_analysis"]
-	baseline = report["baseline"]
-	best_result = report["best_result"]
-	best_config = report["best_config"]
-	strategy = report["strategy"]
-
-	print(f"System: {system.get('cpu_cores', '—')} CPU cores | {system.get('ram_gb', 0):.1f} GB RAM | {system.get('os', 'Unknown')}")
-	dgpu_name = system.get('dgpu_name', 'None')
-	igpu_name = system.get('igpu_name', 'None')
-	npu_name  = system.get('npu_name', 'None')
-	print(f"  dGPU: {dgpu_name} ({system.get('dgpu_vram_gb', 0.0):.2f} GB) | iGPU: {igpu_name} ({system.get('igpu_vram_gb', 0.0):.2f} GB) | NPU: {npu_name}")
-	print(f"Model: {model.get('model_name', 'Unknown')} | {model.get('num_params', 0):,} params | {model.get('size_mb', 0.0):.2f} MB")
-	print("\nBefore:")
-	print(f"  Latency : {baseline.get('latency_range_ms', (0.0, 0.0))[0]:.2f}ms – {baseline.get('latency_range_ms', (0.0, 0.0))[1]:.2f}ms")
-	print(f"  Memory  : {baseline.get('memory_mb', 0.0):.2f}MB")
-	print("\nAfter:")
-	print(f"  Latency : {best_result.get('latency_range_ms', (0.0, 0.0))[0]:.2f}ms – {best_result.get('latency_range_ms', (0.0, 0.0))[1]:.2f}ms")
-	print(f"  Memory  : {best_result.get('memory_mb', 0.0):.2f}MB")
-	
-	if "decode_tokens_per_sec" in best_result:
-		print(f"  Speed   : {best_result['decode_tokens_per_sec']:.2f} tokens/sec")
-	if "prefill_latency_ms" in best_result:
-		print(f"  TTFT    : {best_result['prefill_latency_ms']:.2f} ms (Prefill)")
-
-	print(f"  Config  : {best_config.get('name', 'unknown')} ({best_config.get('mode', 'unknown')})")
-	print(f"\nRecommendation: {strategy.get('recommendation', 'No recommendation available.')}")
-	if report.get("prompt_optimizer"):
-		prompt_result = report["prompt_optimizer"]
-		print("\nPrompt Optimizer:")
-		print(f"  Before Score : {prompt_result.get('before_score', 0)} / 100")
-		print(f"  After Score  : {prompt_result.get('after_score', 0)} / 100")
-		print("  Suggestions  :")
-		for suggestion in prompt_result.get("suggestions", []):
-			print(f"    - {suggestion}")
+	render_final_table(report)
 
 
 def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
@@ -350,126 +317,106 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
 	model_hash = calculate_model_hash(args.model_path)
 	machine_id = f"{platform.node()}_{platform.system()}"
 	
+	# Initialize TUI
+	tui = SysAwareTUI(goal, args.model_path)
+	tui.update_header(machine_id)
+	tui.update_system_panel(system_profile)
+	
 	server_url = args.server
 	
-	# Autodiscovery logic
-	if not server_url:
-		logger.info("No server URL provided. Scanning local network for SysAware server...")
-		server_url = discover_server()
+	# Start TUI Live View
+	with Live(tui.layout, refresh_per_second=4, screen=not args.json):
+		# Autodiscovery logic
+		if not server_url:
+			server_url = discover_server()
+
+		# Handle join request and approval if server is present
 		if server_url:
-			logger.info(f"Discovered SysAware server at {server_url}")
-		else:
-			logger.info("No server discovered. Running in standalone mode.")
-
-	# Handle join request and approval if server is present
-	if server_url:
-		try:
-			join_url = f"{server_url.rstrip('/')}/api/fleet/join/request"
-			requests.post(join_url, json={"machine_id": machine_id}, timeout=5)
-			
-			print(f"\n--- FLEET JOIN REQUEST ---")
-			print(f"Server detected: {server_url}")
-			print(f"To connect this node to the fleet, please approve it:")
-			print(f"1. Type 'y' here in this terminal.")
-			print(f"2. OR Accept the pop-up in the Server Dashboard.")
-			print(f"This terminal will auto-proceed with local benchmark in 10 seconds...\n")
-			
-			# "OR-gate" input handling: 10 second timeout
-			rlist, _, _ = select.select([sys.stdin], [], [], 10)
-			if rlist:
-				user_input = sys.stdin.readline().strip().lower()
-				if user_input == 'y':
-					# Approve locally
-					approve_url = f"{server_url.rstrip('/')}/api/fleet/join/approve"
-					requests.post(approve_url, json={"machine_id": machine_id}, timeout=5)
-					IS_APPROVED = True
-					logger.info("Node approved locally via CLI.")
-				else:
-					logger.info("Local approval skipped. Awaiting dashboard approval...")
-			else:
-				logger.info("Approval timeout. Proceeding with local benchmark while awaiting dashboard approval.")
-			
-			# Start heartbeat and approval poller
-			start_heartbeat(server_url)
-			threading.Thread(target=check_approval, args=(server_url, machine_id), daemon=True).start()
-			
-		except Exception as e:
-			logger.warning(f"Failed to communicate join request to {server_url}: {e}")
-
-	# 1. Strategy Memoization: Check Cache First
-	cached_report = get_cached_strategy(model_hash, goal, system_profile)
-	if cached_report:
-		logger.info("Found optimized strategy in local cache. Skipping benchmark.")
-		# Restore model_path as it might change between machines/runs
-		cached_report["model_path"] = args.model_path
-		if server_url:
-			report_telemetry(server_url, cached_report)
-		return cached_report
-
-	# 2. Blacklist: Fetch known-crashing backends
-	blacklist = []
-	if server_url:
-		blacklist = fetch_blacklist(server_url)
-
-	model = load_model_from_path(args.model_path, args.unsafe_load)
-	model_analysis = analyze_model(model)
-	baseline = estimate_performance(model, system_profile)
-	strategy = get_strategy(system_profile, goal, model_analysis)
-	
-	# 3. Autotune with Blacklist support
-	best_config, best_model, best_result = None, None, None
-	try:
-		from core.autotuner import autotune_generator
-		gen = autotune_generator(model, system_profile, goal, blacklist=blacklist)
-		while True:
 			try:
-				update = next(gen)
-				status = update.get("status")
-				if status == "candidate_failed" and server_url:
-					report_blacklist(server_url, update["candidate"], update["error"])
-				elif status == "complete":
-					best_config = update["best_config"]
-					best_result = update["best_result"]
-				elif not args.json:
-					# Basic progress logging for human view
-					msg = update.get("message") or f"Status: {status}"
-					if "candidate" in update:
-						msg = f"[{update['candidate']}] {msg}"
-					logger.info(msg)
-			except StopIteration as e:
-				best_config, best_model, best_result = e.value
-				break
-	except Exception as exc:
-		logger.error(f"Autotune failed: {exc}")
-		raise
+				join_url = f"{server_url.rstrip('/')}/api/fleet/join/request"
+				requests.post(join_url, json={"machine_id": machine_id}, timeout=5)
+				
+				# Start heartbeat and approval poller
+				start_heartbeat(server_url)
+				threading.Thread(target=check_approval, args=(server_url, machine_id), daemon=True).start()
+				
+			except Exception as e:
+				logger.warning(f"Failed to communicate join request: {e}")
 
-	prompt_result = None
-	if args.optimize_prompt:
-		if not args.prompt_text.strip():
-			raise ValueError("--prompt-text is required when --optimize-prompt is enabled")
-		prompt_result = optimize_prompt(args.prompt_text, args.prompt_type)
+		# 1. Strategy Memoization: Check Cache First
+		cached_report = get_cached_strategy(model_hash, goal, system_profile)
+		if cached_report:
+			cached_report["model_path"] = args.model_path
+			if server_url:
+				report_telemetry(server_url, cached_report)
+			return cached_report
 
-	report = build_report(
-		model_path=args.model_path,
-		goal=goal,
-		system_profile=system_profile,
-		model_analysis=model_analysis,
-		baseline=baseline,
-		strategy=strategy,
-		best_config=best_config,
-		best_result=best_result,
-		model_hash=model_hash,
-		prompt_result=prompt_result,
-	)
+		# 2. Blacklist: Fetch known-crashing backends
+		blacklist = []
+		if server_url:
+			blacklist = fetch_blacklist(server_url)
 
-	# 4. Save to cache for future runs
-	save_strategy_to_cache(model_hash, goal, system_profile, report)
-	
-	# 5. Final report to server if approved
-	if server_url:
-		report_telemetry(server_url, report)
-	
-	return report
+		model = load_model_from_path(args.model_path, args.unsafe_load)
+		model_analysis = analyze_model(model)
+		baseline = estimate_performance(model, system_profile)
+		strategy = get_strategy(system_profile, goal, model_analysis)
+		
+		# 3. Autotune with TUI updates
+		tui.update_progress()
+		best_config, best_model, best_result = None, None, None
+		try:
+			from core.autotuner import autotune_generator
+			gen = autotune_generator(model, system_profile, goal, blacklist=blacklist)
+			while True:
+				try:
+					update = next(gen)
+					status = update.get("status")
+					
+					if status == "evaluating":
+						tui.start_candidate(update["candidate"])
+					elif status == "candidate_complete":
+						tui.complete_candidate(update["candidate"])
+					elif status == "candidate_failed":
+						tui.fail_candidate(update["candidate"], update["error"])
+						if server_url:
+							report_blacklist(server_url, update["candidate"], update["error"])
+					elif status == "complete":
+						best_config = update["best_config"]
+						best_result = update["best_result"]
+				except StopIteration as e:
+					best_config, best_model, best_result = e.value
+					break
+		except Exception as exc:
+			logger.error(f"Autotune failed: {exc}")
+			raise
+
+		prompt_result = None
+		if args.optimize_prompt:
+			if not args.prompt_text.strip():
+				raise ValueError("--prompt-text is required when --optimize-prompt is enabled")
+			prompt_result = optimize_prompt(args.prompt_text, args.prompt_type)
+
+		report = build_report(
+			model_path=args.model_path,
+			goal=goal,
+			system_profile=system_profile,
+			model_analysis=model_analysis,
+			baseline=baseline,
+			strategy=strategy,
+			best_config=best_config,
+			best_result=best_result,
+			model_hash=model_hash,
+			prompt_result=prompt_result,
+		)
+
+		# 4. Save to cache for future runs
+		save_strategy_to_cache(model_hash, goal, system_profile, report)
+		
+		# 5. Final report to server if approved
+		if server_url:
+			report_telemetry(server_url, report)
+		
+		return report
 
 
 def main(argv: list[str] | None = None) -> int:
