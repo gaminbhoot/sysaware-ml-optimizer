@@ -22,8 +22,9 @@ from core.validation import ValidationError, set_global_seed, validate_goal
 from core.utils import calculate_model_hash
 from core.memoization import get_cached_strategy, save_strategy_to_cache
 from core.autodiscovery import discover_server
-from core.tui import SysAwareTUI, render_final_table, Live
+from core.tui import SysAwareTUI, render_final_table, Live, box
 from core.exporter import export_deployment_artifacts
+from core.simulator import simulate_performance, VIRTUAL_HARDWARE
 
 
 logger = get_logger("sysaware.cli")
@@ -171,6 +172,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 		"--export-deploy",
 		action="store_true",
 		help="Generate production-ready deployment artifacts (Dockerfile, runner, systemd) in the deploy/ directory",
+	)
+	parser.add_argument(
+		"--simulate",
+		choices=list(VIRTUAL_HARDWARE.keys()),
+		help="Simulate performance on virtual target hardware",
 	)
 	return parser.parse_args(argv)
 
@@ -451,6 +457,36 @@ def main(argv: list[str] | None = None) -> int:
 			from rich.panel import Panel
 			from core.tui import console
 			console.print(Panel(f"[bold green]✓ Deployment Artifacts Exported[/]\\nLocation: [cyan]{deploy_path}[/]", title="Export-to-Deploy", border_style="green"))
+
+	if args.simulate:
+		sim_report = simulate_performance(report, args.simulate)
+		if sim_report and not args.json:
+			from rich.table import Table
+			from rich.panel import Panel
+			from core.tui import console
+			
+			table = Table(title=f"[bold yellow]Virtual Simulation: {sim_report['target_hardware']}[/]", box=box.ROUNDED)
+			table.add_column("Metric", style="dim")
+			table.add_column("Predicted Value", justify="right", style="bold yellow")
+			
+			if sim_report["is_oom_predicted"]:
+				table.add_row("Status", "[bold red]OUT OF MEMORY PREDICTED[/]")
+			else:
+				table.add_row("Status", "[bold green]Compatible[/]")
+				
+			l_min, l_max = sim_report["simulated_latency_range_ms"]
+			table.add_row("Simulated Latency", f"{l_max:.2f}ms")
+			
+			if sim_report["simulated_tokens_per_sec"]:
+				table.add_row("Simulated Throughput", f"{sim_report['simulated_tokens_per_sec']:.2f} t/s")
+			
+			if sim_report["simulated_ttft_ms"]:
+				table.add_row("Simulated TTFT", f"{sim_report['simulated_ttft_ms']:.2f} ms")
+				
+			table.add_row("Compute Gain", f"{sim_report['ratios']['compute_gain']:.2fx}")
+			table.add_row("Bandwidth Gain", f"{sim_report['ratios']['bandwidth_gain']:.2fx}")
+			
+			console.print(table)
 
 	return 0
 

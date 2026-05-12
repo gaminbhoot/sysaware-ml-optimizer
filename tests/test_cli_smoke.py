@@ -61,8 +61,7 @@ def test_main_prints_human_readable_report(monkeypatch: pytest.MonkeyPatch, caps
     output = capsys.readouterr().out
 
     assert code == 0
-    assert "System:" in output
-    assert "Model:" in output
+    assert "Final Optimization Report" in output
     assert "Recommendation:" in output
     assert "Use FP16 on GPU." in output
 

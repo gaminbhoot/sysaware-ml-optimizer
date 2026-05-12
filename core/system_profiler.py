@@ -51,6 +51,8 @@ def get_system_profile() -> SystemProfile:
 		"igpu_vram_gb": 0.0,
 		"npu_available": False,
 		"npu_name": "None",
+		"tflops_fp16": 1.0,  # Default baseline (CPU-like)
+		"bandwidth_gb_s": 32.0,  # Default baseline (DDR4-like)
 	}
 
 	try:
@@ -102,6 +104,23 @@ def get_system_profile() -> SystemProfile:
 			profile["dgpu_name"] = profile["gpu_name"]
 			profile["dgpu_vram_gb"] = profile["gpu_vram_gb"]
 			
+			# Rough heuristics for simulator ratios
+			name_l = profile["gpu_name"].lower()
+			if "h100" in name_l:
+				profile["tflops_fp16"], profile["bandwidth_gb_s"] = 989.0, 3350.0
+			elif "a100" in name_l:
+				profile["tflops_fp16"], profile["bandwidth_gb_s"] = 312.0, 1935.0
+			elif "4090" in name_l:
+				profile["tflops_fp16"], profile["bandwidth_gb_s"] = 82.5, 1008.0
+			elif "3090" in name_l:
+				profile["tflops_fp16"], profile["bandwidth_gb_s"] = 35.6, 936.0
+			elif "3060" in name_l:
+				profile["tflops_fp16"], profile["bandwidth_gb_s"] = 12.7, 360.0
+			else:
+				# General fallback for modern NVIDIA GPUs
+				profile["tflops_fp16"] = profile["gpu_vram_gb"] * 2.5
+				profile["bandwidth_gb_s"] = profile["gpu_vram_gb"] * 30.0
+			
 		elif mps is not None and bool(mps.is_available()):
 			profile["gpu_available"] = True
 			profile["gpu_backend"] = "mps"
@@ -110,6 +129,10 @@ def get_system_profile() -> SystemProfile:
 			profile["gpu_vram_gb"] = profile.get("ram_available_gb", profile["ram_gb"])
 			profile["dgpu_name"] = profile["gpu_name"]
 			profile["dgpu_vram_gb"] = profile["gpu_vram_gb"]
+			
+			# Apple Silicon heuristics (M1/M2/M3 averages)
+			profile["tflops_fp16"] = 10.0
+			profile["bandwidth_gb_s"] = 200.0
 
 	except Exception as exc:
 		logger.warning("GPU detection failed: %s", exc)

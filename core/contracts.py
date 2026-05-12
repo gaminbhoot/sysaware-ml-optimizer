@@ -27,6 +27,8 @@ class SystemProfile(TypedDict):
     igpu_vram_gb: float
     npu_available: bool
     npu_name: str
+    tflops_fp16: float
+    bandwidth_gb_s: float
 
 
 class ModelAnalysis(TypedDict):
