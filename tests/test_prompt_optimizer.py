@@ -176,6 +176,7 @@ def test_optimize_prompt_result_shape(prompt: str, intent: str) -> None:
         "suggestions",
         "before_score",
         "after_score",
+        "removed_words",
     }
     assert isinstance(result["optimized_prompt"], str)
     assert isinstance(result["suggestions"], list)

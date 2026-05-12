@@ -33,6 +33,8 @@ def test_get_system_profile_has_expected_keys(reset_profiler_deps: None) -> None
         "igpu_vram_gb",
         "npu_available",
         "npu_name",
+        "bandwidth_gb_s",
+        "tflops_fp16",
     }
 
 
@@ -187,13 +189,14 @@ def test_darwin_npu_detection_requires_explicit_probe(reset_profiler_deps: None,
     monkeypatch.setattr(sp.platform, "system", lambda: "Darwin")
 
     import subprocess
+    from types import SimpleNamespace
 
-    def fake_check_output(cmd: str, *args, **kwargs):
+    def fake_run(cmd, *args, **kwargs):
         if "ioreg" in cmd:
-            return "+-o AppleANE  <class AppleANE, id 0x100000>"
+            return SimpleNamespace(returncode=0, stdout="+-o AppleANE  <class AppleANE, id 0x100000>")
         raise OSError("unexpected command")
 
-    monkeypatch.setattr(subprocess, "check_output", fake_check_output)
+    monkeypatch.setattr(subprocess, "run", fake_run)
 
     profile = sp.get_system_profile()
     assert profile["npu_available"] is True
@@ -204,13 +207,14 @@ def test_darwin_npu_detection_no_probe_hit(reset_profiler_deps: None, monkeypatc
     monkeypatch.setattr(sp.platform, "system", lambda: "Darwin")
 
     import subprocess
+    from types import SimpleNamespace
 
-    def fake_check_output(cmd: str, *args, **kwargs):
+    def fake_run(cmd, *args, **kwargs):
         if "ioreg" in cmd:
-            return "no ane signal"
+            return SimpleNamespace(returncode=0, stdout="no ane signal")
         raise OSError("unexpected command")
 
-    monkeypatch.setattr(subprocess, "check_output", fake_check_output)
+    monkeypatch.setattr(subprocess, "run", fake_run)
 
     profile = sp.get_system_profile()
     assert profile["npu_available"] is False

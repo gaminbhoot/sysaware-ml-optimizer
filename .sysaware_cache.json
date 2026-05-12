@@ -1,0 +1,72 @@
+{
+  "97f5fde21f1b530ef1df67581ab16acffc2c199f96d12a8f3154a45f924bcf5c": {
+    "model_path": "model.pt",
+    "model_hash": "unknown",
+    "goal": "balanced",
+    "system_profile": {
+      "cpu_cores": 8,
+      "ram_gb": 16.0,
+      "ram_available_gb": 12.0,
+      "gpu_available": true,
+      "gpu_backend": "cuda",
+      "gpu_name": "RTX 4070",
+      "gpu_vram_gb": 12.0,
+      "dgpu_name": "RTX 4070",
+      "dgpu_vram_gb": 12.0,
+      "igpu_name": "None",
+      "igpu_vram_gb": 0.0,
+      "npu_available": false,
+      "npu_name": "None",
+      "os": "Windows 11"
+    },
+    "model_analysis": {
+      "model_name": "DummyModel",
+      "num_params": 100,
+      "trainable_params": 100,
+      "size_mb": 0.38
+    },
+    "baseline": {
+      "latency_range_ms": [
+        10.0,
+        12.0
+      ],
+      "memory_mb": 100.0,
+      "confidence": "high",
+      "method": "static"
+    },
+    "strategy": {
+      "optimization": "fp16",
+      "device": "cuda",
+      "rationale": "gpu headroom available",
+      "recommendation": "Use FP16 on GPU."
+    },
+    "best_config": {
+      "name": "fp16",
+      "mode": "fp16",
+      "metadata": {
+        "method": "fp16"
+      },
+      "goal": "balanced",
+      "score": 5.0,
+      "evaluated_candidates": 3
+    },
+    "best_result": {
+      "latency_range_ms": [
+        5.0,
+        7.0
+      ],
+      "memory_mb": 70.0,
+      "confidence": "high",
+      "method": "static+micro-benchmark"
+    },
+    "prompt_optimizer": {
+      "original_prompt": "make this clearer",
+      "optimized_prompt": "make this clearer",
+      "suggestions": [
+        "ok"
+      ],
+      "before_score": 10,
+      "after_score": 80
+    }
+  }
+}

@@ -337,7 +337,9 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
 	server_url = args.server
 	
 	# Start TUI Live View
-	with Live(tui.layout, refresh_per_second=4, screen=not args.json):
+	from rich.console import Console
+	live_console = Console(file=sys.stderr) if getattr(args, "json", False) else None
+	with Live(tui.layout, refresh_per_second=4, screen=not args.json, console=live_console):
 		# Autodiscovery logic
 		if not server_url:
 			server_url = discover_server()

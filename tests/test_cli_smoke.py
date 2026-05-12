@@ -87,6 +87,7 @@ def test_run_pipeline_executes_full_flow(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.setattr(main, "set_global_seed", lambda seed: calls.append(f"seed:{seed}"))
     monkeypatch.setattr(main, "get_system_profile", lambda: {"cpu_cores": 8, "ram_gb": 16.0, "ram_available_gb": 12.0, "gpu_available": True, "gpu_backend": "cuda", "gpu_name": "RTX 4070", "gpu_vram_gb": 12.0, "dgpu_name": "RTX 4070", "dgpu_vram_gb": 12.0, "igpu_name": "None", "igpu_vram_gb": 0.0, "npu_available": False, "npu_name": "None", "os": "Windows 11"})
+    monkeypatch.setattr(main, "get_cached_strategy", lambda *args: None)
     monkeypatch.setattr(main, "load_model_from_path", lambda path, unsafe_load=False: calls.append(f"load:{path}") or {"model": path})
     monkeypatch.setattr(main, "analyze_model", lambda model: calls.append("analyze") or {"model_name": "DummyModel", "num_params": 100, "trainable_params": 100, "size_mb": 0.38})
     monkeypatch.setattr(main, "estimate_performance", lambda model, profile: calls.append("estimate") or {"latency_range_ms": (10.0, 12.0), "memory_mb": 100.0, "confidence": "high", "method": "static"})
