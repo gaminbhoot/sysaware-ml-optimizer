@@ -34,7 +34,7 @@ export const ModelAnalysis = () => {
         className="mb-16"
       >
         <h1 className="text-luxury-header !text-4xl md:!text-6xl">Model Inspection</h1>
-        <p className="text-luxury-mono mt-4 text-white/40">Serialization & architectural profiling</p>
+        <p className="text-luxury-subheading mt-4 text-white/40 !text-base">Serialization & architectural profiling</p>
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-8 flex-1">
@@ -108,7 +108,7 @@ export const ModelAnalysis = () => {
               animate={{ opacity: 1, y: 0 }}
               className="glass-card p-8"
             >
-              <h3 className="text-luxury-mono mb-8">Structural Diagnostics</h3>
+              <h3 className="text-luxury-subheading mb-8 !text-lg">Structural Diagnostics</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-black/40 p-4 rounded-xl border border-white/5">
                   <div className="text-white/40 text-[10px] uppercase font-bold tracking-widest mb-1">Total Parameters</div>
@@ -136,7 +136,7 @@ export const ModelAnalysis = () => {
         {/* Right Panel (Slide-in / Utility) */}
         <div className="col-span-1 md:col-span-4">
           <div className="glass-card p-8 sticky top-24">
-            <h3 className="text-luxury-mono mb-6 text-red-400">Security / Advanced</h3>
+            <h3 className="text-luxury-subheading mb-6 text-red-400 !text-lg">Security / Advanced</h3>
             <label className="flex items-center gap-3 cursor-pointer group">
               <div className="relative">
                 <input

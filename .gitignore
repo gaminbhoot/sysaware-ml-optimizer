@@ -53,3 +53,9 @@ models/
 # Frontend artifacts (handled in root for safety)
 frontend/node_modules/
 frontend/dist/
+
+# Live-Bench Integration
+live-bench/
+*.db
+*.sqlite
+*.sqlite3

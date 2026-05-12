@@ -7,6 +7,7 @@ import { ModelAnalysis } from './pages/Model';
 import { Optimizer } from './pages/Optimizer';
 import { Prompts } from './pages/Prompt';
 import { Results } from './pages/Results';
+import { FleetView } from './pages/FleetView';
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
             <Route path="/optimizer" element={<Optimizer />} />
             <Route path="/prompt" element={<Prompts />} />
             <Route path="/results" element={<Results />} />
+            <Route path="/fleet" element={<FleetView />} />
           </Route>
         </Routes>
       </BrowserRouter>

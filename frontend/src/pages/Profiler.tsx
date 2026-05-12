@@ -53,7 +53,7 @@ export const Profiler = () => {
         className="mb-16"
       >
         <h1 className="text-luxury-header !text-4xl md:!text-6xl">System Profiler</h1>
-        <p className="text-luxury-mono mt-4 text-white/40">Hardware telemetry & resource mapping</p>
+        <p className="text-luxury-subheading mt-4 text-white/40 !text-base">Hardware telemetry & resource mapping</p>
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-8 flex-1">
@@ -109,7 +109,7 @@ export const Profiler = () => {
         {/* Right Panel */}
         <div className="col-span-1 md:col-span-4">
           <div className="glass-card p-8 sticky top-24">
-            <h3 className="text-luxury-mono mb-6">Actions</h3>
+            <h3 className="text-luxury-subheading mb-6 !text-lg">Actions</h3>
             <button
               onClick={runProfiler}
               disabled={loading}

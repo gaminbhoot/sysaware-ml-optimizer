@@ -37,11 +37,15 @@ class ModelAnalysis(TypedDict):
     layer_types: Dict[str, int]
 
 
-class PerformanceEstimate(TypedDict):
+class PerformanceEstimate(TypedDict, total=False):
     latency_range_ms: Tuple[float, float]
     memory_mb: float
     confidence: str
     method: str
+    # Real-world LLM metrics
+    decode_tokens_per_sec: float
+    prefill_latency_ms: float
+    wall_clock_ms: float
 
 
 class StrategyResult(TypedDict):

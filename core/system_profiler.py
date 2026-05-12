@@ -24,27 +24,14 @@ def _bytes_to_gb(value: float) -> float:
 
 
 def _probe_apple_neural_engine() -> tuple[bool, str]:
-	"""Return explicit ANE detection result on macOS.
-
-	This intentionally avoids platform assumptions (for example, arm64 => ANE).
-	A positive result is only returned when OS-level probes expose ANE signals.
-	"""
 	try:
 		import subprocess
-
-		# Prefer IORegistry signals because they expose device/driver entries.
-		probes: list[tuple[str, str]] = [
-			("ioreg -r -n AppleANE -l", "Apple Neural Engine"),
-			("ioreg -l", "AppleANE"),
-		]
-
-		for cmd, name in probes:
-			output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL)
-			if "appleane" in output.lower() or "neural engine" in output.lower():
-				return True, name
+		# Targeted check for AppleANE
+		res = subprocess.run(["ioreg", "-n", "AppleANE"], capture_output=True, text=True)
+		if res.returncode == 0 and "AppleANE" in res.stdout:
+			return True, "Apple Neural Engine"
 	except Exception:
-		return False, "None"
-
+		pass
 	return False, "None"
 
 

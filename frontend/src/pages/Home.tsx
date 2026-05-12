@@ -50,7 +50,7 @@ export const Home = () => {
         <h1 className="text-luxury-header mb-6 text-white tracking-[-0.04em]">
           SysAware
         </h1>
-        <p className="text-luxury-mono text-white/40 mb-20">
+        <p className="text-luxury-subheading text-white/40 mb-20 !text-lg">
           Hardware-Aware Machine Learning Optimization
         </p>
       </motion.div>

@@ -66,7 +66,38 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 		action="store_true",
 		help="Allow arbitrary code execution by bypassing weights_only during model load",
 	)
+	parser.add_argument(
+		"--server",
+		help="URL of the central SysAware server for fleet telemetry (e.g. http://192.168.1.10:8000)",
+	)
 	return parser.parse_args(argv)
+
+
+def report_telemetry(server_url: str, report: dict[str, Any]) -> None:
+	"""Post the final report to a central ingestion server."""
+	import platform
+	import requests
+
+	# Clean up report for transmission
+	payload = {
+		"machine_id": f"{platform.node()}_{platform.system()}",
+		"hardware_profile": report["system_profile"],
+		"goal": report["goal"],
+		"latency_range": report["best_result"]["latency_range_ms"],
+		"memory_mb": report["best_result"]["memory_mb"],
+		"decode_tokens_per_sec": report["best_result"].get("decode_tokens_per_sec"),
+		"prefill_latency_ms": report["best_result"].get("prefill_latency_ms")
+	}
+
+	try:
+		ingest_url = f"{server_url.rstrip('/')}/api/telemetry/ingest"
+		response = requests.post(ingest_url, json=payload, timeout=5)
+		if response.status_code == 200:
+			logger.info(f"Successfully reported telemetry to {ingest_url}")
+		else:
+			logger.warning(f"Failed to report telemetry. Server returned {response.status_code}")
+	except Exception as e:
+		logger.warning(f"Could not connect to telemetry server {server_url}: {e}")
 
 
 def load_model_from_path(model_path: str, unsafe_load: bool = False) -> Any:
@@ -192,6 +223,12 @@ def print_human_report(report: dict[str, Any]) -> None:
 	print("\nAfter:")
 	print(f"  Latency : {best_result.get('latency_range_ms', (0.0, 0.0))[0]:.2f}ms – {best_result.get('latency_range_ms', (0.0, 0.0))[1]:.2f}ms")
 	print(f"  Memory  : {best_result.get('memory_mb', 0.0):.2f}MB")
+	
+	if "decode_tokens_per_sec" in best_result:
+		print(f"  Speed   : {best_result['decode_tokens_per_sec']:.2f} tokens/sec")
+	if "prefill_latency_ms" in best_result:
+		print(f"  TTFT    : {best_result['prefill_latency_ms']:.2f} ms (Prefill)")
+
 	print(f"  Config  : {best_config.get('name', 'unknown')} ({best_config.get('mode', 'unknown')})")
 	print(f"\nRecommendation: {strategy.get('recommendation', 'No recommendation available.')}")
 	if report.get("prompt_optimizer"):
@@ -242,6 +279,8 @@ def main(argv: list[str] | None = None) -> int:
 
 	try:
 		report = run_pipeline(args)
+		if args.server:
+			report_telemetry(args.server, report)
 	except (ValidationError, FileNotFoundError, RuntimeError, ValueError) as exc:
 		logger.error(str(exc))
 		if getattr(args, "json", False):

@@ -34,7 +34,7 @@ export const Prompts = () => {
         className="mb-16"
       >
         <h1 className="text-luxury-header !text-4xl md:!text-6xl">Prompt Engine</h1>
-        <p className="text-luxury-mono mt-4 text-white/40">Semantic intent restructuring</p>
+        <p className="text-luxury-subheading mt-4 text-white/40 !text-base">Semantic intent restructuring</p>
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-8 flex-1">

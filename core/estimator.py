@@ -7,11 +7,16 @@ from typing import Any
 
 from .contracts import PerformanceEstimate
 from .logging_utils import get_logger
+from .benchmark import run_llm_benchmark
 
 try:
 	import torch  # type: ignore
+	from transformers import PreTrainedModel
 except Exception:  # pragma: no cover
 	torch = None  # type: ignore
+	PreTrainedModel = None
+
+logger = get_logger("sysaware.estimator")
 
 
 logger = get_logger("sysaware.estimator")
@@ -221,19 +226,33 @@ def estimate_performance(model: Any, profile: dict[str, Any]) -> PerformanceEsti
 	if not isinstance(profile, dict):
 		raise ValueError("Profile must be a dictionary")
 
+	# Logic for LLM detection
+	is_llm = (PreTrainedModel is not None and isinstance(model, PreTrainedModel))
+
 	static_memory_mb = _estimate_static_memory_mb(model)
 	latency_range = (0.0, 0.0)
 	memory_mb = static_memory_mb
 	confidence = "low"
 	method = "static"
+	
+	llm_metrics = {}
 
 	try:
-		latency_range, benchmark_memory_mb, benchmark_confidence = _run_micro_benchmark(model, profile)
-		memory_mb = max(static_memory_mb, benchmark_memory_mb)
-		confidence = benchmark_confidence
-		method = "static+micro-benchmark"
+		if is_llm:
+			logger.info("LLM detected. Running real-world inference benchmark (tokens/sec).")
+			llm_metrics, benchmark_memory_mb, benchmark_confidence = run_llm_benchmark(model, profile)
+			# Map LLM metrics to contract
+			latency_range = (llm_metrics["prefill_latency_ms"], llm_metrics["prefill_latency_ms"])
+			memory_mb = max(static_memory_mb, benchmark_memory_mb)
+			confidence = benchmark_confidence
+			method = "real-world-llm-benchmark"
+		else:
+			latency_range, benchmark_memory_mb, benchmark_confidence = _run_micro_benchmark(model, profile)
+			memory_mb = max(static_memory_mb, benchmark_memory_mb)
+			confidence = benchmark_confidence
+			method = "static+micro-benchmark"
 	except Exception as exc:
-		logger.warning("Micro-benchmark failed, using static estimate only: %s", exc)
+		logger.warning("Benchmarking failed, using static estimate only: %s", exc)
 		if static_memory_mb > 0:
 			latency_range = (0.0, max(0.1, static_memory_mb * 10.0))
 
@@ -246,4 +265,11 @@ def estimate_performance(model: Any, profile: dict[str, Any]) -> PerformanceEsti
 		"confidence": confidence,
 		"method": method,
 	}
+	
+	# Plumb through LLM metrics if available
+	if is_llm and llm_metrics:
+		estimate["decode_tokens_per_sec"] = float(llm_metrics.get("decode_tokens_per_sec", 0.0))
+		estimate["prefill_latency_ms"] = float(llm_metrics.get("prefill_latency_ms", 0.0))
+		estimate["wall_clock_ms"] = float(llm_metrics.get("wall_clock_ms", 0.0))
+
 	return estimate

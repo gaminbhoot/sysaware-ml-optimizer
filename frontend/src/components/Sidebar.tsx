@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Activity, Cpu, Layers, Zap, MessageSquare, Target } from 'lucide-react';
+import { Activity, Cpu, Layers, Zap, MessageSquare, Target, Server } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion } from 'framer-motion';
 
@@ -9,6 +9,7 @@ const navItems = [
   { path: '/optimizer', icon: Zap, label: 'Optimizer' },
   { path: '/prompt', icon: MessageSquare, label: 'Prompts' },
   { path: '/results', icon: Target, label: 'Results' },
+  { path: '/fleet', icon: Server, label: 'Fleet' },
 ];
 
 export const Sidebar = () => {

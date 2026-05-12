@@ -1,17 +1,26 @@
 import { createContext, useContext, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, Dispatch, SetStateAction } from 'react';
 
 interface StoreState {
   systemProfile: any;
-  setSystemProfile: (data: any) => void;
+  setSystemProfile: Dispatch<SetStateAction<any>>;
   modelAnalysis: any;
-  setModelAnalysis: (data: any) => void;
+  setModelAnalysis: Dispatch<SetStateAction<any>>;
   strategy: any;
-  setStrategy: (data: any) => void;
+  setStrategy: Dispatch<SetStateAction<any>>;
   modelPath: string;
-  setModelPath: (path: string) => void;
+  setModelPath: Dispatch<SetStateAction<string>>;
   goal: string;
-  setGoal: (goal: string) => void;
+  setGoal: Dispatch<SetStateAction<string>>;
+  // Live Tuning State
+  isTuning: boolean;
+  setIsTuning: Dispatch<SetStateAction<boolean>>;
+  tuningProgress: string;
+  setTuningProgress: Dispatch<SetStateAction<string>>;
+  tuningCandidates: any[];
+  setTuningCandidates: Dispatch<SetStateAction<any[]>>;
+  winningConfig: any;
+  setWinningConfig: Dispatch<SetStateAction<any>>;
 }
 
 const StoreContext = createContext<StoreState | undefined>(undefined);
@@ -22,6 +31,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [strategy, setStrategy] = useState<any>(null);
   const [modelPath, setModelPath] = useState('');
   const [goal, setGoal] = useState('latency');
+  
+  // Live Tuning
+  const [isTuning, setIsTuning] = useState(false);
+  const [tuningProgress, setTuningProgress] = useState('Idle');
+  const [tuningCandidates, setTuningCandidates] = useState<any[]>([]);
+  const [winningConfig, setWinningConfig] = useState<any>(null);
 
   return (
     <StoreContext.Provider value={{
@@ -29,7 +44,11 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       modelAnalysis, setModelAnalysis,
       strategy, setStrategy,
       modelPath, setModelPath,
-      goal, setGoal
+      goal, setGoal,
+      isTuning, setIsTuning,
+      tuningProgress, setTuningProgress,
+      tuningCandidates, setTuningCandidates,
+      winningConfig, setWinningConfig
     }}>
       {children}
     </StoreContext.Provider>

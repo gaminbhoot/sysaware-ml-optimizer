@@ -1,20 +1,48 @@
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import os
 import anyio
 import sys
 import subprocess
+import json
+import asyncio
 import core.system_profiler as sp
 import core.model_analyzer as ma
 import core.estimator as est
 import core.strategy_engine as se
 import core.prompt_optimizer as po
 import core.autotuner as at
+import core.store as store
 from main import load_model_from_path
 
 app = FastAPI(title="SysAware ML Optimizer API")
+
+# Initialize DB
+store.init_db()
+
+# --- SSE Broker ---
+class EventBroker:
+    def __init__(self):
+        self.listeners = set()
+
+    async def subscribe(self):
+        queue = asyncio.Queue()
+        self.listeners.add(queue)
+        try:
+            while True:
+                yield await queue.get()
+        finally:
+            self.listeners.remove(queue)
+
+    async def publish(self, data: dict):
+        msg = f"data: {json.dumps(data)}\n\n"
+        for queue in self.listeners:
+            await queue.put(msg)
+
+broker = EventBroker()
 
 # --- Models ---
 class AnalyzeRequest(BaseModel):
@@ -40,7 +68,50 @@ class AutotuneRequest(BaseModel):
     goal: str
     unsafe_load: bool = False
 
+class TelemetryReport(BaseModel):
+    machine_id: str
+    hardware_profile: dict
+    goal: str
+    latency_range: list[float]
+    memory_mb: float
+    decode_tokens_per_sec: float | None = None
+    prefill_latency_ms: float | None = None
+
 # --- API Routes ---
+@app.post("/api/telemetry/ingest")
+async def ingest_telemetry(report: TelemetryReport):
+    try:
+        # Save to SQLite
+        await anyio.to_thread.run_sync(
+            store.insert_telemetry,
+            report.machine_id,
+            report.hardware_profile,
+            report.goal,
+            report.latency_range,
+            report.memory_mb,
+            report.decode_tokens_per_sec,
+            report.prefill_latency_ms
+        )
+        # Broadcast via SSE
+        await broker.publish({
+            "type": "telemetry",
+            "data": report.model_dump()
+        })
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/telemetry/stream")
+async def stream_telemetry():
+    return StreamingResponse(broker.subscribe(), media_type="text/event-stream")
+
+@app.get("/api/telemetry/history")
+async def get_telemetry_history():
+    try:
+        history = await anyio.to_thread.run_sync(store.get_recent_telemetry)
+        return {"status": "success", "history": history}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 @app.get("/api/system")
 async def get_system():
     try:
@@ -142,6 +213,32 @@ async def autotune_endpoint(req: AutotuneRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/optimize/autotune/stream")
+async def autotune_stream_endpoint(req: AutotuneRequest):
+    try:
+        # Load model first (blocking but in thread)
+        model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
+        
+        async def event_generator():
+            # Create the generator
+            gen = at.autotune_generator(model_obj, req.system_profile, req.goal)
+            
+            while True:
+                try:
+                    # Execute next(gen) in a separate thread to avoid blocking the event loop
+                    update = await anyio.to_thread.run_sync(next, gen)
+                    yield f"data: {json.dumps(update)}\n\n"
+                except StopIteration:
+                    break
+                except Exception as e:
+                    yield f"data: {json.dumps({'status': 'error', 'detail': str(e)})}\n\n"
+                    break
+
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # --- Serve React Frontend ---
 if os.path.exists("frontend/dist"):
     app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
@@ -154,4 +251,4 @@ else:
         }
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
