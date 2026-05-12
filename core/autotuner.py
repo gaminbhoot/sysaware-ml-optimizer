@@ -48,13 +48,14 @@ def _evaluate_candidate(model: Any, profile: dict[str, Any], mode: str) -> tuple
 	return optimized_model, metadata, result
 
 
-def autotune_generator(model: Any, profile: dict[str, Any], goal: str) -> Generator[dict[str, Any], None, tuple[dict[str, Any], Any, PerformanceEstimate]]:
+def autotune_generator(model: Any, profile: dict[str, Any], goal: str, blacklist: list[str] | None = None) -> Generator[dict[str, Any], None, tuple[dict[str, Any], Any, PerformanceEstimate]]:
 	if model is None:
 		raise ValueError("Model cannot be None")
 	if not isinstance(profile, dict):
 		raise ValueError("Profile must be a dictionary")
 
 	goal_v = validate_goal(goal)
+	blacklist = blacklist or []
 
 	yield {"status": "starting", "message": f"Starting autotune for goal: {goal_v}"}
 
@@ -80,7 +81,10 @@ def autotune_generator(model: Any, profile: dict[str, Any], goal: str) -> Genera
 	}
 
 	# 2. Evaluate specialized candidates in parallel
-	modes = ["int8", "fp16"]
+	modes = [m for m in ["int8", "fp16"] if m not in blacklist]
+	if blacklist:
+		logger.info(f"Skipping blacklisted modes: {', '.join([m for m in ['int8', 'fp16'] if m in blacklist])}")
+	
 	yield {"status": "evaluating_parallel", "candidates": modes, "message": f"Evaluating {', '.join(modes)} in parallel..."}
 	
 	with concurrent.futures.ThreadPoolExecutor(max_workers=len(modes)) as executor:
@@ -136,8 +140,8 @@ def autotune_generator(model: Any, profile: dict[str, Any], goal: str) -> Genera
 	return best_config, best_candidate["model"], best_candidate["result"]
 
 
-def autotune(model: Any, profile: dict[str, Any], goal: str) -> tuple[dict[str, Any], Any, PerformanceEstimate]:
-	gen = autotune_generator(model, profile, goal)
+def autotune(model: Any, profile: dict[str, Any], goal: str, blacklist: list[str] | None = None) -> tuple[dict[str, Any], Any, PerformanceEstimate]:
+	gen = autotune_generator(model, profile, goal, blacklist)
 	try:
 		while True:
 			next(gen)

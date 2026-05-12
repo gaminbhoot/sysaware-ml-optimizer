@@ -1,5 +1,6 @@
 import time
 import tracemalloc
+import psutil
 from typing import Any, Dict, Tuple
 
 from .logging_utils import get_logger
@@ -14,6 +15,16 @@ except ImportError:
 
 logger = get_logger("sysaware.benchmark")
 
+def check_memory_headroom(model_size_mb: float, threshold: float = 0.9) -> bool:
+    """
+    Checks if there is enough RAM to safely run the benchmark.
+    threshold: 0.9 means we abort if model takes > 90% of available RAM.
+    """
+    available_mb = psutil.virtual_memory().available / (1024 * 1024)
+    # Model needs its static size + roughly 20% overhead for activation tensors during profiling
+    required_mb = model_size_mb * 1.2 
+    return required_mb < (available_mb * threshold)
+
 def run_llm_benchmark(model: Any, profile: dict[str, Any]) -> Tuple[Dict[str, float], float, str]:
     """
     Run a real-world inference benchmark on an LLM.
@@ -22,6 +33,12 @@ def run_llm_benchmark(model: Any, profile: dict[str, Any]) -> Tuple[Dict[str, fl
     """
     if torch is None:
         raise RuntimeError("torch is required for LLM benchmarking.")
+
+    # OOM Safeguard
+    model_size_mb = profile.get("model_size_mb", 0.0)
+    if not check_memory_headroom(model_size_mb):
+        logger.warning(f"Insufficient memory to safely benchmark this model ({model_size_mb:.2f}MB). Aborting to prevent OOM crash.")
+        raise MemoryError(f"Insufficient RAM for benchmark: {model_size_mb:.2f}MB model requires more headroom.")
 
     # Device selection
     device_name = "cpu"

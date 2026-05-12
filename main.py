@@ -1,6 +1,11 @@
 import argparse
 import json
 import sys
+import select
+import time
+import requests
+import platform
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -14,9 +19,99 @@ from core.strategy_engine import get_strategy
 from core.system_profiler import get_system_profile
 from core.autotuner import autotune
 from core.validation import ValidationError, set_global_seed, validate_goal
+from core.utils import calculate_model_hash
+from core.memoization import get_cached_strategy, save_strategy_to_cache
+from core.autodiscovery import discover_server
 
 
 logger = get_logger("sysaware.cli")
+
+# Global flag to enable heartbeat/telemetry after approval
+IS_APPROVED = False
+
+def check_approval(server_url: str, machine_id: str):
+	"""Polls the server to see if this node has been approved."""
+	global IS_APPROVED
+	while not IS_APPROVED:
+		try:
+			url = f"{server_url.rstrip('/')}/api/fleet/join/status?machine_id={machine_id}"
+			response = requests.get(url, timeout=5)
+			if response.status_code == 200:
+				status = response.json().get("status")
+				if status == "approved":
+					IS_APPROVED = True
+					logger.info("Fleet join request APPROVED by admin.")
+					break
+				elif status == "rejected":
+					logger.warning("Fleet join request REJECTED by admin.")
+					break
+		except Exception:
+			pass
+		time.sleep(5)
+
+def start_heartbeat(server_url: str):
+	"""Starts a background thread to send periodic heartbeats to the server."""
+	from core.system_profiler import get_system_profile
+
+	machine_id = f"{platform.node()}_{platform.system()}"
+	profile = get_system_profile()
+	
+	def heartbeat_loop():
+		global IS_APPROVED
+		heartbeat_url = f"{server_url.rstrip('/')}/api/telemetry/heartbeat"
+		while True:
+			if IS_APPROVED:
+				try:
+					payload = {
+						"machine_id": machine_id,
+						"hardware_profile": profile,
+						"status": "benchmarking"
+					}
+					requests.post(heartbeat_url, json=payload, timeout=5)
+				except Exception:
+					pass
+			time.sleep(30)
+
+	thread = threading.Thread(target=heartbeat_loop, daemon=True)
+	thread.start()
+	logger.info("Heartbeat service started (awaiting approval/active)")
+
+
+def fetch_blacklist(server_url: str) -> list[str]:
+	"""Fetches the global blacklist from the server."""
+	import requests
+	import platform
+	
+	machine_id = f"{platform.node()}_{platform.system()}"
+	try:
+		blacklist_url = f"{server_url.rstrip('/')}/api/telemetry/blacklist"
+		response = requests.get(blacklist_url, timeout=5)
+		if response.status_code == 200:
+			data = response.json()
+			# Filter blacklist to only include entries relevant to THIS machine
+			return [entry["backend"] for entry in data.get("blacklist", []) if entry["machine_id"] == machine_id]
+	except Exception as e:
+		logger.warning(f"Could not fetch blacklist from {server_url}: {e}")
+	return []
+
+
+def report_blacklist(server_url: str, backend: str, reason: str):
+	"""Reports a crashing backend to the server's blacklist."""
+	import requests
+	import platform
+	
+	machine_id = f"{platform.node()}_{platform.system()}"
+	try:
+		blacklist_url = f"{server_url.rstrip('/')}/api/telemetry/blacklist"
+		payload = {
+			"machine_id": machine_id,
+			"backend": backend,
+			"reason": reason
+		}
+		requests.post(blacklist_url, json=payload, timeout=5)
+		logger.info(f"Reported crashing backend '{backend}' to global blacklist")
+	except Exception as e:
+		logger.warning(f"Could not report blacklist entry to {server_url}: {e}")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -75,12 +170,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def report_telemetry(server_url: str, report: dict[str, Any]) -> None:
 	"""Post the final report to a central ingestion server."""
-	import platform
-	import requests
+	global IS_APPROVED
+	if not IS_APPROVED:
+		logger.debug("Telemetry reporting skipped (not approved).")
+		return
 
 	# Clean up report for transmission
 	payload = {
 		"machine_id": f"{platform.node()}_{platform.system()}",
+		"model_hash": report.get("model_hash", "unknown"),
 		"hardware_profile": report["system_profile"],
 		"goal": report["goal"],
 		"latency_range": report["best_result"]["latency_range_ms"],
@@ -188,10 +286,12 @@ def build_report(
 	strategy: dict[str, Any],
 	best_config: dict[str, Any],
 	best_result: dict[str, Any],
+	model_hash: str = "unknown",
 	prompt_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
 	return {
 		"model_path": model_path,
+		"model_hash": model_hash,
 		"goal": goal,
 		"system_profile": system_profile,
 		"model_analysis": model_analysis,
@@ -242,15 +342,106 @@ def print_human_report(report: dict[str, Any]) -> None:
 
 
 def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
+	global IS_APPROVED
 	goal = validate_goal(args.goal)
 	set_global_seed(args.seed)
 
 	system_profile = get_system_profile()
+	model_hash = calculate_model_hash(args.model_path)
+	machine_id = f"{platform.node()}_{platform.system()}"
+	
+	server_url = args.server
+	
+	# Autodiscovery logic
+	if not server_url:
+		logger.info("No server URL provided. Scanning local network for SysAware server...")
+		server_url = discover_server()
+		if server_url:
+			logger.info(f"Discovered SysAware server at {server_url}")
+		else:
+			logger.info("No server discovered. Running in standalone mode.")
+
+	# Handle join request and approval if server is present
+	if server_url:
+		try:
+			join_url = f"{server_url.rstrip('/')}/api/fleet/join/request"
+			requests.post(join_url, json={"machine_id": machine_id}, timeout=5)
+			
+			print(f"\n--- FLEET JOIN REQUEST ---")
+			print(f"Server detected: {server_url}")
+			print(f"To connect this node to the fleet, please approve it:")
+			print(f"1. Type 'y' here in this terminal.")
+			print(f"2. OR Accept the pop-up in the Server Dashboard.")
+			print(f"This terminal will auto-proceed with local benchmark in 10 seconds...\n")
+			
+			# "OR-gate" input handling: 10 second timeout
+			rlist, _, _ = select.select([sys.stdin], [], [], 10)
+			if rlist:
+				user_input = sys.stdin.readline().strip().lower()
+				if user_input == 'y':
+					# Approve locally
+					approve_url = f"{server_url.rstrip('/')}/api/fleet/join/approve"
+					requests.post(approve_url, json={"machine_id": machine_id}, timeout=5)
+					IS_APPROVED = True
+					logger.info("Node approved locally via CLI.")
+				else:
+					logger.info("Local approval skipped. Awaiting dashboard approval...")
+			else:
+				logger.info("Approval timeout. Proceeding with local benchmark while awaiting dashboard approval.")
+			
+			# Start heartbeat and approval poller
+			start_heartbeat(server_url)
+			threading.Thread(target=check_approval, args=(server_url, machine_id), daemon=True).start()
+			
+		except Exception as e:
+			logger.warning(f"Failed to communicate join request to {server_url}: {e}")
+
+	# 1. Strategy Memoization: Check Cache First
+	cached_report = get_cached_strategy(model_hash, goal, system_profile)
+	if cached_report:
+		logger.info("Found optimized strategy in local cache. Skipping benchmark.")
+		# Restore model_path as it might change between machines/runs
+		cached_report["model_path"] = args.model_path
+		if server_url:
+			report_telemetry(server_url, cached_report)
+		return cached_report
+
+	# 2. Blacklist: Fetch known-crashing backends
+	blacklist = []
+	if server_url:
+		blacklist = fetch_blacklist(server_url)
+
 	model = load_model_from_path(args.model_path, args.unsafe_load)
 	model_analysis = analyze_model(model)
 	baseline = estimate_performance(model, system_profile)
 	strategy = get_strategy(system_profile, goal, model_analysis)
-	best_config, best_model, best_result = autotune(model, system_profile, goal)
+	
+	# 3. Autotune with Blacklist support
+	best_config, best_model, best_result = None, None, None
+	try:
+		from core.autotuner import autotune_generator
+		gen = autotune_generator(model, system_profile, goal, blacklist=blacklist)
+		while True:
+			try:
+				update = next(gen)
+				status = update.get("status")
+				if status == "candidate_failed" and server_url:
+					report_blacklist(server_url, update["candidate"], update["error"])
+				elif status == "complete":
+					best_config = update["best_config"]
+					best_result = update["best_result"]
+				elif not args.json:
+					# Basic progress logging for human view
+					msg = update.get("message") or f"Status: {status}"
+					if "candidate" in update:
+						msg = f"[{update['candidate']}] {msg}"
+					logger.info(msg)
+			except StopIteration as e:
+				best_config, best_model, best_result = e.value
+				break
+	except Exception as exc:
+		logger.error(f"Autotune failed: {exc}")
+		raise
 
 	prompt_result = None
 	if args.optimize_prompt:
@@ -258,7 +449,7 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
 			raise ValueError("--prompt-text is required when --optimize-prompt is enabled")
 		prompt_result = optimize_prompt(args.prompt_text, args.prompt_type)
 
-	return build_report(
+	report = build_report(
 		model_path=args.model_path,
 		goal=goal,
 		system_profile=system_profile,
@@ -267,8 +458,18 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
 		strategy=strategy,
 		best_config=best_config,
 		best_result=best_result,
+		model_hash=model_hash,
 		prompt_result=prompt_result,
 	)
+
+	# 4. Save to cache for future runs
+	save_strategy_to_cache(model_hash, goal, system_profile, report)
+	
+	# 5. Final report to server if approved
+	if server_url:
+		report_telemetry(server_url, report)
+	
+	return report
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -279,8 +480,6 @@ def main(argv: list[str] | None = None) -> int:
 
 	try:
 		report = run_pipeline(args)
-		if args.server:
-			report_telemetry(args.server, report)
 	except (ValidationError, FileNotFoundError, RuntimeError, ValueError) as exc:
 		logger.error(str(exc))
 		if getattr(args, "json", False):

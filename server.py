@@ -16,6 +16,7 @@ import core.strategy_engine as se
 import core.prompt_optimizer as po
 import core.autotuner as at
 import core.store as store
+import core.autodiscovery as discovery
 from main import load_model_from_path
 
 app = FastAPI(title="SysAware ML Optimizer API")
@@ -68,14 +69,51 @@ class AutotuneRequest(BaseModel):
     goal: str
     unsafe_load: bool = False
 
+class HeartbeatRequest(BaseModel):
+    machine_id: str
+    hardware_profile: dict | None = None
+    status: str = "idle"
+
+class BlacklistEntry(BaseModel):
+    machine_id: str
+    backend: str
+    reason: str
+
+class JoinRequest(BaseModel):
+    machine_id: str
+
 class TelemetryReport(BaseModel):
     machine_id: str
+    model_hash: str = "unknown"
     hardware_profile: dict
     goal: str
     latency_range: list[float]
     memory_mb: float
     decode_tokens_per_sec: float | None = None
     prefill_latency_ms: float | None = None
+
+# --- Background Tasks ---
+async def server_heartbeat_task():
+    """Periodically sends a heartbeat for the machine running the server."""
+    machine_id = f"{os.uname().nodename}_{os.uname().sysname}" if hasattr(os, "uname") else f"{os.environ.get('COMPUTERNAME', 'server')}_windows"
+    machine_id += "_local_server"
+    
+    # Simple profile for the server node
+    profile = sp.get_system_profile()
+    
+    while True:
+        try:
+            # We call the store directly since we're in the same process
+            await anyio.to_thread.run_sync(store.update_heartbeat, machine_id, profile, "idle")
+        except Exception as e:
+            print(f"Error in server heartbeat: {e}")
+        await asyncio.sleep(30)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(server_heartbeat_task())
+    # Start UDP Discovery Beacon on port 8000
+    discovery.start_beacon(api_port=8000)
 
 # --- API Routes ---
 @app.post("/api/telemetry/ingest")
@@ -89,6 +127,7 @@ async def ingest_telemetry(report: TelemetryReport):
             report.goal,
             report.latency_range,
             report.memory_mb,
+            report.model_hash,
             report.decode_tokens_per_sec,
             report.prefill_latency_ms
         )
@@ -112,6 +151,89 @@ async def get_telemetry_history():
         return {"status": "success", "history": history}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/fleet/active")
+async def get_active_nodes():
+    try:
+        nodes = await anyio.to_thread.run_sync(store.get_active_nodes)
+        return {"status": "success", "nodes": nodes}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/fleet/node/{machine_id}")
+async def delete_node(machine_id: str):
+    try:
+        await anyio.to_thread.run_sync(store.delete_node, machine_id)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/fleet/join/request")
+async def request_join(req: JoinRequest):
+    try:
+        await anyio.to_thread.run_sync(store.create_join_request, req.machine_id)
+        # Broadcast to dashboard
+        await broker.publish({
+            "type": "join_request",
+            "machine_id": req.machine_id
+        })
+        return {"status": "pending"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/fleet/join/status")
+async def get_join_status(machine_id: str):
+    try:
+        status = await anyio.to_thread.run_sync(store.get_node_join_status, machine_id)
+        return {"status": status}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/fleet/join/approve")
+async def approve_join(req: JoinRequest):
+    try:
+        await anyio.to_thread.run_sync(store.set_node_approval, req.machine_id, True)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/fleet/join/reject")
+async def reject_join(req: JoinRequest):
+    try:
+        await anyio.to_thread.run_sync(store.set_node_approval, req.machine_id, False)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/telemetry/heartbeat")
+async def heartbeat(req: HeartbeatRequest):
+    try:
+        await anyio.to_thread.run_sync(store.update_heartbeat, req.machine_id, req.hardware_profile, req.status)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/telemetry/blacklist")
+async def get_blacklist():
+    try:
+        entries = await anyio.to_thread.run_sync(store.get_blacklist)
+        return {"status": "success", "blacklist": entries}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/telemetry/blacklist")
+async def add_to_blacklist(entry: BlacklistEntry):
+    try:
+        await anyio.to_thread.run_sync(store.add_to_blacklist, entry.machine_id, entry.backend, entry.reason)
+        # Also broadcast via SSE
+        await broker.publish({
+            "type": "blacklist",
+            "data": entry.model_dump()
+        })
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/system")
 async def get_system():
     try:

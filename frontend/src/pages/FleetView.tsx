@@ -1,7 +1,19 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Server, Cpu, Zap, History, LayoutGrid, List } from 'lucide-react';
+import { Server, Cpu, Zap, History, LayoutGrid, List, Trash2, Activity, Filter, RefreshCcw } from 'lucide-react';
 import { cn } from '../lib/utils';
+
+interface NodeData {
+  machine_id: string;
+  hardware_profile: {
+    cpu?: string;
+    ram_gb?: number;
+    dgpu_name?: string;
+    os?: string;
+  };
+  status: string;
+  last_seen: string;
+}
 
 interface TelemetryData {
   machine_id: string;
@@ -20,48 +32,135 @@ interface TelemetryData {
 }
 
 export const FleetView = () => {
-  const [fleet, setFleet] = useState<TelemetryData[]>([]);
+  const [activeNodes, setActiveNodes] = useState<NodeData[]>([]);
+  const [history, setHistory] = useState<TelemetryData[]>([]);
+  const [pendingNode, setPendingNode] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'live' | 'history'>('live');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isConnected, setIsConnected] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchData = async () => {
+    setIsRefreshing(true);
+    try {
+      const [historyRes, nodesRes] = await Promise.all([
+        fetch('/api/telemetry/history'),
+        fetch('/api/fleet/active')
+      ]);
+      
+      const historyData = await historyRes.json();
+      const nodesData = await nodesRes.json();
+
+      if (historyData.status === 'success') setHistory(historyData.history);
+      if (nodesData.status === 'success') setActiveNodes(nodesData.nodes);
+    } catch (e) {
+      console.error("Failed to refresh data", e);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    // Fetch initial history
-    fetch('/api/telemetry/history')
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') {
-          setFleet(data.history);
-        }
-      });
-
-    // Subscribe to live stream
+    fetchData();
     const eventSource = new EventSource('/api/telemetry/stream');
-    
     eventSource.onopen = () => setIsConnected(true);
     eventSource.onerror = () => setIsConnected(false);
 
     eventSource.onmessage = (event) => {
       const message = JSON.parse(event.data);
       if (message.type === 'telemetry') {
-        const newData = message.data;
-        setFleet(prev => {
-          // Replace if exists, or append
-          const index = prev.findIndex(item => item.machine_id === newData.machine_id);
-          if (index !== -1) {
-            const updated = [...prev];
-            updated[index] = { ...newData, timestamp: new Date().toISOString() };
-            return updated;
-          }
-          return [{ ...newData, timestamp: new Date().toISOString() }, ...prev];
-        });
+        fetchData(); // Refresh history on new telemetry
+      } else if (message.type === 'join_request') {
+        setPendingNode(message.machine_id);
       }
     };
 
-    return () => eventSource.close();
+    const pollInterval = setInterval(fetchData, 15000); // Poll active nodes every 15s
+
+    return () => {
+      eventSource.close();
+      clearInterval(pollInterval);
+    };
   }, []);
+
+  const handleDeleteNode = async (id: string) => {
+    if (!confirm(`Are you sure you want to remove node ${id} and all its benchmark history?`)) return;
+    
+    try {
+      const res = await fetch(`/api/fleet/node/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchData();
+      }
+    } catch (e) {
+      console.error("Delete failed", e);
+    }
+  };
+
+  const handleJoinResponse = async (id: string, approve: boolean) => {
+    try {
+      const endpoint = approve ? '/api/fleet/join/approve' : '/api/fleet/join/reject';
+      await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ machine_id: id })
+      });
+      setPendingNode(null);
+      if (approve) fetchData();
+    } catch (e) {
+      console.error("Join response failed", e);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#050505] p-12 ml-24">
+      {/* Join Request Modal */}
+      <AnimatePresence>
+        {pendingNode && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="glass-card max-w-md w-full p-8 border-emerald/20 shadow-[0_0_50px_rgba(16,185,129,0.1)]"
+            >
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 rounded-2xl bg-emerald/10 border border-emerald/20 flex items-center justify-center">
+                  <Activity className="text-emerald" size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl text-white font-bold">Join Request</h3>
+                  <p className="text-white/40 text-sm">A new node wants to connect.</p>
+                </div>
+              </div>
+
+              <div className="bg-white/5 rounded-xl p-4 mb-8">
+                <p className="text-luxury-mono text-[10px] text-white/20 mb-1">Machine ID</p>
+                <p className="text-white font-mono break-all">{pendingNode}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <button 
+                  onClick={() => handleJoinResponse(pendingNode, false)}
+                  className="px-6 py-3 rounded-xl bg-white/5 text-white/60 hover:bg-white/10 transition-all font-medium"
+                >
+                  Decline
+                </button>
+                <button 
+                  onClick={() => handleJoinResponse(pendingNode, true)}
+                  className="px-6 py-3 rounded-xl bg-emerald text-white hover:bg-emerald-600 transition-all font-bold shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+                >
+                  Accept Node
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header Section */}
       <div className="flex justify-between items-end mb-16">
         <div>
@@ -70,65 +169,122 @@ export const FleetView = () => {
               "w-2 h-2 rounded-full",
               isConnected ? "bg-emerald shadow-[0_0_8px_#10B981]" : "bg-red-500 shadow-[0_0_8px_#EF4444]"
             )} />
-            <span className="text-luxury-mono">Fleet Telemetry Engine</span>
+            <span className="text-luxury-mono">SysAware Fleet Management</span>
           </div>
-          <h1 className="text-5xl mb-2 text-white">Distributed Nodes</h1>
-          <p className="text-luxury-subheading text-white/50">Real-time hardware optimization across the network.</p>
+          <h1 className="text-5xl mb-2 text-white">Infrastructure</h1>
+          <p className="text-luxury-subheading text-white/50">Manage active benchmarking nodes and historical performance data.</p>
         </div>
 
-        <div className="flex gap-4 p-1 bg-white/[0.03] border border-white/10 rounded-xl">
+        <div className="flex items-center gap-6">
+           {/* Tab Switcher */}
+          <div className="flex p-1 bg-white/[0.03] border border-white/10 rounded-xl">
+            <TabButton active={activeTab === 'live'} onClick={() => setActiveTab('live')} icon={Activity} label="Live Fleet" count={activeNodes.length} />
+            <TabButton active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={History} label="Telemetry History" count={history.length} />
+          </div>
+
+          <div className="h-8 w-px bg-white/10" />
+
           <button 
-            onClick={() => setViewMode('grid')}
-            className={cn(
-              "p-2 rounded-lg transition-all",
-              viewMode === 'grid' ? "bg-white/10 text-white" : "text-white/30 hover:text-white/60"
-            )}
+            onClick={fetchData}
+            className={cn("p-2 text-white/40 hover:text-white transition-all", isRefreshing && "animate-spin text-emerald")}
           >
-            <LayoutGrid size={18} />
-          </button>
-          <button 
-            onClick={() => setViewMode('list')}
-            className={cn(
-              "p-2 rounded-lg transition-all",
-              viewMode === 'list' ? "bg-white/10 text-white" : "text-white/30 hover:text-white/60"
-            )}
-          >
-            <List size={18} />
+            <RefreshCcw size={20} />
           </button>
         </div>
       </div>
 
       {/* Analytics Overview */}
       <div className="grid grid-cols-4 gap-6 mb-12">
-        <StatsCard label="Active Nodes" value={fleet.length.toString()} icon={Server} />
-        <StatsCard label="Avg. Latency" value={`${(fleet.reduce((acc, curr) => acc + curr.latency_range[1], 0) / (fleet.length || 1)).toFixed(2)}ms`} icon={Zap} />
-        <StatsCard label="Total Memory" value={`${(fleet.reduce((acc, curr) => acc + curr.memory_mb, 0) / 1024).toFixed(2)}GB`} icon={History} />
-        <StatsCard label="Fleet Health" value={isConnected ? "100%" : "0%"} icon={Cpu} />
+        <StatsCard label="Fleet Status" value={activeNodes.length > 0 ? "Operational" : "Idle"} icon={Server} color={activeNodes.length > 0 ? "text-emerald" : "text-white/40"} />
+        <StatsCard label="Peak T/S" value={`${Math.max(...history.map(h => h.decode_tokens_per_sec || 0), 0).toFixed(1)}`} icon={Zap} />
+        <StatsCard label="Benchmarks" value={history.length.toString()} icon={History} />
+        <StatsCard label="Connection" value={isConnected ? "Secure" : "Lost"} icon={Cpu} color={isConnected ? "text-emerald" : "text-red-500"} />
       </div>
 
-      {/* Fleet Display */}
-      <AnimatePresence mode="popLayout">
-        <motion.div 
-          layout
-          className={cn(
-            "grid gap-6",
-            viewMode === 'grid' ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"
-          )}
-        >
-          {fleet.map((node) => (
-            <NodeCard key={node.machine_id} node={node} viewMode={viewMode} />
-          ))}
-        </motion.div>
+      {/* Main Content Area */}
+      <div className="mb-8 flex justify-between items-center">
+        <div className="flex gap-4">
+           {/* Filter Bar Placeholder */}
+           <div className="flex items-center gap-2 px-4 py-2 bg-white/[0.03] border border-white/10 rounded-lg text-white/40 text-sm">
+             <Filter size={14} />
+             <span>Filter by HW</span>
+           </div>
+        </div>
+
+        <div className="flex gap-4 p-1 bg-white/[0.03] border border-white/10 rounded-xl">
+          <button 
+            onClick={() => setViewMode('grid')}
+            className={cn("p-2 rounded-lg transition-all", viewMode === 'grid' ? "bg-white/10 text-white" : "text-white/30 hover:text-white/60")}
+          >
+            <LayoutGrid size={18} />
+          </button>
+          <button 
+            onClick={() => setViewMode('list')}
+            className={cn("p-2 rounded-lg transition-all", viewMode === 'list' ? "bg-white/10 text-white" : "text-white/30 hover:text-white/60")}
+          >
+            <List size={18} />
+          </button>
+        </div>
+      </div>
+
+      <AnimatePresence mode="wait">
+        {activeTab === 'live' ? (
+          <motion.div 
+            key="live"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className={cn("grid gap-6", viewMode === 'grid' ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1")}
+          >
+            {activeNodes.length === 0 ? (
+              <EmptyState message="No active nodes detected. Ensure your CLI or Server is running." />
+            ) : (
+              activeNodes.map(node => (
+                <LiveNodeCard key={node.machine_id} node={node} onDelete={() => handleDeleteNode(node.machine_id)} />
+              ))
+            )}
+          </motion.div>
+        ) : (
+          <motion.div 
+            key="history"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-4"
+          >
+            {history.length === 0 ? (
+              <EmptyState message="No historical telemetry found. Run an optimization to see results here." />
+            ) : (
+              history.map((record, i) => (
+                <HistoryRow key={i} record={record} />
+              ))
+            )}
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );
 };
 
-const StatsCard = ({ label, value, icon: Icon }: { label: string, value: string, icon: any }) => (
+const TabButton = ({ active, onClick, icon: Icon, label, count }: any) => (
+  <button 
+    onClick={onClick}
+    className={cn(
+      "px-6 py-2 rounded-lg flex items-center gap-3 transition-all",
+      active ? "bg-white/10 text-white shadow-xl" : "text-white/30 hover:text-white/60"
+    )}
+  >
+    <Icon size={16} />
+    <span className="text-sm font-medium">{label}</span>
+    <span className="px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] border border-white/5">{count}</span>
+  </button>
+);
+
+const StatsCard = ({ label, value, icon: Icon, color = "text-white" }: any) => (
   <div className="glass-card p-6 flex items-center justify-between border-white/[0.05]">
     <div>
       <p className="text-luxury-mono mb-1">{label}</p>
-      <h3 className="text-2xl text-white font-bold">{value}</h3>
+      <h3 className={cn("text-2xl font-bold", color)}>{value}</h3>
     </div>
     <div className="w-12 h-12 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-center">
       <Icon size={20} className="text-white/40" />
@@ -136,106 +292,78 @@ const StatsCard = ({ label, value, icon: Icon }: { label: string, value: string,
   </div>
 );
 
-const NodeCard = ({ node, viewMode }: { node: TelemetryData, viewMode: 'grid' | 'list' }) => {
-  const isMac = node.hardware_profile.os?.toLowerCase().includes('darwin');
+const EmptyState = ({ message }: { message: string }) => (
+  <div className="col-span-full py-20 text-center border-2 border-dashed border-white/5 rounded-3xl">
+    <p className="text-white/20 text-lg">{message}</p>
+  </div>
+);
+
+const LiveNodeCard = ({ node, onDelete }: { node: NodeData, onDelete: () => void }) => {
+  const isServer = node.machine_id.includes('local_server');
   
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      className={cn(
-        "glass-card p-8 group hover:bg-white/[0.04] transition-all relative overflow-hidden",
-        viewMode === 'list' && "flex items-center justify-between py-6"
-      )}
-    >
-      {/* Background Accent */}
-      <div className="absolute top-0 right-0 w-32 h-32 bg-emerald/5 blur-[64px] rounded-full -mr-16 -mt-16 group-hover:bg-emerald/10 transition-all" />
-      
-      <div className={cn(viewMode === 'list' && "flex items-center gap-8")}>
-        <div className="mb-6">
-          <div className="flex items-center gap-3 mb-2">
-            <span className={cn(
-              "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tighter",
-              isMac ? "bg-white/10 text-white" : "bg-blue-500/10 text-blue-400"
-            )}>
-              {node.hardware_profile.os || 'Unknown OS'}
-            </span>
-            <span className="text-luxury-mono text-[9px]">Last seen {new Date(node.timestamp).toLocaleTimeString()}</span>
-          </div>
-          <h4 className="text-xl text-white mb-1 group-hover:text-emerald transition-colors">
-            {node.machine_id.split('_')[0]}
-          </h4>
-          <p className="text-sm text-white/40">{node.hardware_profile.cpu || 'Generic CPU'}</p>
+    <div className="glass-card p-8 group hover:bg-white/[0.04] transition-all relative overflow-hidden border-white/10">
+      <div className="flex justify-between items-start mb-6">
+        <div>
+           <div className="flex items-center gap-2 mb-2">
+             <div className="w-1.5 h-1.5 rounded-full bg-emerald animate-pulse" />
+             <span className="text-luxury-mono text-[9px] uppercase tracking-widest text-emerald">Active</span>
+             {isServer && <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[8px] font-bold">CORE SERVER</span>}
+           </div>
+           <h4 className="text-xl text-white font-medium">{node.machine_id.split('_')[0]}</h4>
+           <p className="text-sm text-white/40 mt-1">{node.hardware_profile.cpu || 'Unknown CPU'}</p>
         </div>
-
-        {viewMode === 'grid' && (
-          <div className="space-y-6 pt-6 border-t border-white/5">
-            <div className="grid grid-cols-2 gap-8">
-              <div>
-                <p className="text-luxury-mono text-[9px] mb-2">Latency</p>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-2xl text-white font-mono">{node.latency_range[1].toFixed(1)}</span>
-                  <span className="text-xs text-white/30 font-mono">ms</span>
-                </div>
-              </div>
-              <div>
-                <p className="text-luxury-mono text-[9px] mb-2">Memory</p>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-2xl text-white font-mono">{(node.memory_mb).toFixed(0)}</span>
-                  <span className="text-xs text-white/30 font-mono">MB</span>
-                </div>
-              </div>
-            </div>
-
-            {(node.decode_tokens_per_sec || node.prefill_latency_ms) && (
-              <div className="grid grid-cols-2 gap-8 pt-6 border-t border-white/5 border-dashed">
-                {node.decode_tokens_per_sec && (
-                  <div>
-                    <p className="text-luxury-mono text-[9px] mb-2 text-emerald/60">Speed</p>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-xl text-emerald font-mono">{node.decode_tokens_per_sec.toFixed(1)}</span>
-                      <span className="text-[10px] text-emerald/40 font-mono italic">t/s</span>
-                    </div>
-                  </div>
-                )}
-                {node.prefill_latency_ms && (
-                  <div>
-                    <p className="text-luxury-mono text-[9px] mb-2 text-blue-400/60">TTFT</p>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-xl text-blue-400 font-mono">{node.prefill_latency_ms.toFixed(0)}</span>
-                      <span className="text-[10px] text-blue-400/40 font-mono">ms</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+        <button 
+          onClick={onDelete}
+          className="p-2 rounded-lg text-white/20 hover:text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+        >
+          <Trash2 size={16} />
+        </button>
       </div>
 
-      {viewMode === 'list' && (
-        <div className="flex items-center gap-12">
-          {node.decode_tokens_per_sec && (
-            <div className="text-right">
-              <p className="text-luxury-mono text-[9px] mb-1 text-emerald/60">Speed</p>
-              <p className="text-xl text-emerald font-mono">{node.decode_tokens_per_sec.toFixed(1)} t/s</p>
-            </div>
-          )}
-          <div className="text-right">
-            <p className="text-luxury-mono text-[9px] mb-1">Latency</p>
-            <p className="text-xl text-white font-mono">{node.latency_range[1].toFixed(1)}ms</p>
-          </div>
-          <div className="text-right">
-            <p className="text-luxury-mono text-[9px] mb-1">Memory</p>
-            <p className="text-xl text-white font-mono">{(node.memory_mb).toFixed(0)}MB</p>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-center ml-4">
-            <Zap size={16} className={cn(node.decode_tokens_per_sec ? "text-emerald shadow-[0_0_10px_#10B98155]" : "text-white/40")} />
-          </div>
+      <div className="space-y-4">
+        <div className="flex justify-between items-center text-sm">
+          <span className="text-white/30">Current Status</span>
+          <span className="text-white/60 capitalize font-mono text-[10px]">{node.status}</span>
         </div>
-      )}
-    </motion.div>
+        <div className="flex justify-between items-center text-sm">
+          <span className="text-white/30">Last Pulse</span>
+          <span className="text-white/60 font-mono text-[10px]">{new Date(node.last_seen).toLocaleTimeString()}</span>
+        </div>
+      </div>
+    </div>
   );
 };
+
+const HistoryRow = ({ record }: { record: TelemetryData }) => (
+  <div className="glass-card px-8 py-5 flex items-center justify-between group hover:bg-white/[0.02] transition-all border-white/5">
+    <div className="flex items-center gap-8 flex-1">
+      <div className="w-10 h-10 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-center">
+        <History size={18} className="text-white/20" />
+      </div>
+      <div>
+        <p className="text-white font-medium">{record.machine_id.split('_')[0]}</p>
+        <p className="text-[10px] text-white/30 mt-0.5 font-mono">{record.timestamp}</p>
+      </div>
+    </div>
+
+    <div className="flex items-center gap-16">
+      <div className="text-right w-24">
+        <p className="text-luxury-mono text-[9px] text-white/20 mb-1">Goal</p>
+        <p className="text-xs text-white/60 capitalize">{record.goal}</p>
+      </div>
+      <div className="text-right w-24">
+        <p className="text-luxury-mono text-[9px] text-emerald/40 mb-1">Speed</p>
+        <p className="text-lg text-emerald font-mono">{(record.decode_tokens_per_sec || 0).toFixed(1)} <span className="text-[10px] opacity-40">t/s</span></p>
+      </div>
+      <div className="text-right w-24">
+        <p className="text-luxury-mono text-[9px] text-white/20 mb-1">Latency</p>
+        <p className="text-lg text-white font-mono">{record.latency_range[1].toFixed(0)} <span className="text-[10px] opacity-40">ms</span></p>
+      </div>
+      <div className="text-right w-24">
+        <p className="text-luxury-mono text-[9px] text-white/20 mb-1">RAM</p>
+        <p className="text-lg text-white font-mono">{(record.memory_mb).toFixed(0)} <span className="text-[10px] opacity-40">MB</span></p>
+      </div>
+    </div>
+  </div>
+);
