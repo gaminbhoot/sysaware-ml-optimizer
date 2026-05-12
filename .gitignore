@@ -59,3 +59,8 @@ live-bench/
 *.db
 *.sqlite
 *.sqlite3
+
+# Project specific caches and AI artifacts
+.sysaware_cache.json
+IMPLEMENTATION_ROADMAP.md
+patch.py
