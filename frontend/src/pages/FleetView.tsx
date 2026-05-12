@@ -61,25 +61,61 @@ export const FleetView = () => {
   };
 
   useEffect(() => {
-    fetchData();
-    const eventSource = new EventSource('/api/telemetry/stream');
-    eventSource.onopen = () => setIsConnected(true);
-    eventSource.onerror = () => setIsConnected(false);
+    let pollInterval: number;
+    let eventSource: EventSource | null = null;
+    let reconnectTimeout: number;
 
-    eventSource.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      if (message.type === 'telemetry') {
-        fetchData(); // Refresh history on new telemetry
-      } else if (message.type === 'join_request') {
-        setPendingNode(message.machine_id);
-      }
+    const connectStream = () => {
+      if (eventSource) eventSource.close();
+      
+      eventSource = new EventSource('/api/telemetry/stream');
+      
+      eventSource.onopen = () => {
+        setIsConnected(true);
+        startPolling();
+        fetchData(); // Immediate fetch on connect
+      };
+
+      eventSource.onerror = () => {
+        setIsConnected(false);
+        stopPolling();
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        // Slow backoff reconnect (5 seconds) to prevent CPU spin
+        reconnectTimeout = window.setTimeout(connectStream, 5000);
+      };
+
+      eventSource.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.type === 'telemetry') {
+            fetchData();
+          } else if (message.type === 'join_request') {
+            setPendingNode(message.machine_id);
+          }
+        } catch (e) {
+          console.error("Failed to parse SSE message", e);
+        }
+      };
     };
 
-    const pollInterval = setInterval(fetchData, 15000); // Poll active nodes every 15s
+    const startPolling = () => {
+      stopPolling();
+      pollInterval = window.setInterval(fetchData, 15000);
+    };
+
+    const stopPolling = () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+
+    connectStream();
 
     return () => {
-      eventSource.close();
-      clearInterval(pollInterval);
+      if (eventSource) eventSource.close();
+      stopPolling();
+      clearTimeout(reconnectTimeout);
     };
   }, []);
 
