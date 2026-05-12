@@ -55,5 +55,6 @@ class PromptOptimizationResult(TypedDict):
     original_prompt: str
     optimized_prompt: str
     suggestions: list[str]
+    removed_words: list[str]
     before_score: int
     after_score: int

@@ -8,7 +8,9 @@ export default {
     extend: {
       fontFamily: {
         sans: ['"Inter"', 'sans-serif'],
-        mono: ['"JetBrains Mono"', '"Roboto Mono"', 'monospace'],
+        display: ['"Syne"', 'sans-serif'],
+        subheading: ['"Plus Jakarta Sans"', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'monospace'],
       },
       colors: {
         background: '#050505',

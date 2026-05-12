@@ -133,6 +133,34 @@ def _remove_filler_words(text: str) -> Tuple[str, List[str]]:
     cleaned = re.sub(filler_pattern, " ", text).strip()
     return cleaned, removed_list
 
+def _extract_sections(text: str) -> Dict[str, List[str]]:
+    """Deconstructs a prompt into logical sections: context, constraints, and requirements."""
+    sections = {
+        "context": [],
+        "constraints": [],
+        "output_format": [],
+        "task": []
+    }
+    
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    
+    context_keywords = ["working on", "project", "audience", "scenario", "context", "background", "because", "in order to", "considering", "planning", "thinking about", "situation"]
+    constraint_keywords = ["must", "should", "limit", "max", "avoid", "do not", "only", "rule", "constraint", "don't", "prevent", "ensure", "strict"]
+    output_keywords = ["format", "json", "table", "list", "bullet", "steps", "code block", "xml", "tag"]
+    
+    for sentence in sentences:
+        lower = sentence.lower()
+        if any(kw in lower for kw in context_keywords):
+            sections["context"].append(sentence)
+        elif any(kw in lower for kw in constraint_keywords):
+            sections["constraints"].append(sentence)
+        elif any(kw in lower for kw in output_keywords):
+            sections["output_format"].append(sentence)
+        else:
+            sections["task"].append(sentence)
+            
+    return sections
+
 def optimize_prompt(user_prompt: str, intent: str = "general") -> Dict[str, object]:
     normalized = _normalize_spaces(user_prompt)
     if not normalized:
@@ -147,27 +175,42 @@ def optimize_prompt(user_prompt: str, intent: str = "general") -> Dict[str, obje
     
     cleaned_prompt, removed_words = _remove_filler_words(normalized)
     cleaned_prompt = _normalize_spaces(cleaned_prompt)
-
+    
+    # Smart Deconstruction
+    sections = _extract_sections(cleaned_prompt)
+    
     intent_key = intent if intent in INTENT_CONFIGS else "general"
     config = INTENT_CONFIGS[intent_key]
     
     before_score = score_prompt(normalized)
     suggestions = build_suggestions(cleaned_prompt)
 
-    # Building V3 Template with programmatic sections
-    constraints_str = "\n".join([f"- {c}" for c in config["constraints"]])
+    # Reconstruct Task: Use identified task sentences or the whole cleaned prompt if none found
+    core_task = " ".join(sections["task"]) if sections["task"] else cleaned_prompt
+    
+    # Build dynamic sections
+    context_str = "\n".join(sections["context"]) if sections["context"] else "[No specific context provided; assume general use-case]"
+    
+    # Merge extracted constraints with config defaults
+    all_constraints = config["constraints"] + sections["constraints"]
+    constraints_str = "\n".join([f"- {c}" for c in all_constraints])
+    
+    # Output formatting: Merge user preference with config default
+    output_pref = " ".join(sections["output_format"])
+    final_output_format = f"{config['output']} {output_pref}".strip()
+
     few_shot_str = "\n".join([f"Input: {ex['in']}\nOutput: {ex['out']}" for ex in config["few_shot"]])
 
     optimized = (
         f"# Persona/Role\n{config['persona']}\n\n"
-        f"# Task Definition\nTask: {cleaned_prompt}\nGoal: {config['goal']}\n\n"
+        f"# Task Definition\nTask: {core_task}\nGoal: {config['goal']}\n\n"
         f"# Context & Constraints (ABC Rule)\n"
-        f"<context>\n[Provide specific project background, target audience, and necessary source material here]\n</context>\n\n"
+        f"<context>\n{context_str}\n</context>\n\n"
         f"<constraints>\n{constraints_str}\n- {config['failure_clause']}\n</constraints>\n\n"
         f"# Few-Shot Examples\n{few_shot_str}\n\n"
         f"# Chain-of-Thought Instruction\n"
         f"<thought_process>\nBefore providing the final output, think step-by-step. Analyze the requirements, list your assumptions, and identify potential complications.\n</thought_process>\n\n"
-        f"# Output Requirements\nFormat: {config['output']}"
+        f"# Output Requirements\nFormat: {final_output_format}"
     )
 
     after_score = score_prompt(optimized)

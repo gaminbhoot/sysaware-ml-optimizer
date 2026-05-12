@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Activity, Cpu, Monitor, HardDrive } from 'lucide-react';
+import { Activity, Cpu, Monitor, HardDrive, Zap } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 
 const StatCard = ({ label, value, icon: Icon, delay = 0 }: { label: string, value: string | number, icon: any, delay?: number }) => (
@@ -16,7 +16,7 @@ const StatCard = ({ label, value, icon: Icon, delay = 0 }: { label: string, valu
       </div>
       <span className="text-luxury-mono">{label}</span>
     </div>
-    <div className="font-sans font-bold text-4xl text-white tracking-tight">
+    <div className="font-sans font-bold text-2xl md:text-3xl text-white tracking-tight break-words">
       {value}
     </div>
   </motion.div>
@@ -52,7 +52,7 @@ export const Profiler = () => {
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         className="mb-16"
       >
-        <h1 className="text-4xl md:text-6xl font-black tracking-[-0.03em] text-white">System Profiler</h1>
+        <h1 className="text-luxury-header !text-4xl md:!text-6xl">System Profiler</h1>
         <p className="text-luxury-mono mt-4 text-white/40">Hardware telemetry & resource mapping</p>
       </motion.div>
 
@@ -73,6 +73,30 @@ export const Profiler = () => {
                 value={systemProfile.gpu_available ? (systemProfile.gpu_backend || 'Generic').toUpperCase() : 'CPU Only'} 
                 icon={Activity} 
                 delay={0.4} 
+              />
+              <StatCard 
+                label="dGPU" 
+                value={systemProfile.dgpu_name !== 'None' ? systemProfile.dgpu_name : 'None'} 
+                icon={Zap} 
+                delay={0.5} 
+              />
+              <StatCard 
+                label="iGPU" 
+                value={systemProfile.igpu_name !== 'None' ? systemProfile.igpu_name : 'None'} 
+                icon={Monitor} 
+                delay={0.6} 
+              />
+              <StatCard 
+                label="NPU" 
+                value={systemProfile.npu_available ? systemProfile.npu_name : 'None'} 
+                icon={Cpu} 
+                delay={0.7} 
+              />
+              <StatCard 
+                label="Available RAM" 
+                value={`${(systemProfile.ram_available_gb || 0).toFixed(1)} GB`} 
+                icon={Activity} 
+                delay={0.8} 
               />
             </div>
           ) : (

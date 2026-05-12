@@ -41,7 +41,7 @@ export const Optimizer = () => {
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         className="mb-16"
       >
-        <h1 className="text-4xl md:text-6xl font-black tracking-[-0.03em] text-white">Optimization Engine</h1>
+        <h1 className="text-luxury-header !text-4xl md:!text-6xl">Optimization Engine</h1>
         <p className="text-luxury-mono mt-4 text-white/40">Benchmarking & Tuning Configuration</p>
       </motion.div>
 

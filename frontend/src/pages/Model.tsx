@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Database, Search } from 'lucide-react';
+import { Database, Search, Trash2 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 
 export const ModelAnalysis = () => {
@@ -33,7 +33,7 @@ export const ModelAnalysis = () => {
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         className="mb-16"
       >
-        <h1 className="text-4xl md:text-6xl font-black tracking-[-0.03em] text-white">Model Inspection</h1>
+        <h1 className="text-luxury-header !text-4xl md:!text-6xl">Model Inspection</h1>
         <p className="text-luxury-mono mt-4 text-white/40">Serialization & architectural profiling</p>
       </motion.div>
 
@@ -83,6 +83,23 @@ export const ModelAnalysis = () => {
                 </>
               )}
             </button>
+
+            {modelAnalysis && (
+              <button
+                onClick={async () => {
+                  try {
+                    await fetch('/api/model/unload', { method: 'POST' });
+                  } catch (e) {
+                    console.error('Unload failed', e);
+                  }
+                  setModelAnalysis(null);
+                  setModelPath('');
+                }}
+                className="mt-4 px-8 py-4 rounded-xl bg-red-500/10 text-red-400 font-mono text-xs tracking-widest uppercase hover:bg-red-500/20 transition-all flex items-center justify-center gap-2 self-start border border-red-500/20"
+              >
+                <Trash2 size={14} /> Unload Model
+              </button>
+            )}
           </div>
 
           {modelAnalysis && (

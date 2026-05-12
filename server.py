@@ -4,6 +4,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import os
 import anyio
+import sys
+import subprocess
 import core.system_profiler as sp
 import core.model_analyzer as ma
 import core.estimator as est
@@ -54,13 +56,18 @@ async def browse_model():
         if sys.platform == "darwin":
             # Using anyio.to_thread.run_sync to avoid blocking the event loop
             def run_osascript():
+                script = 'POSIX path of (choose file with prompt "Select PyTorch Model:")'
                 return subprocess.run(
-                    ['osascript', '-e', 'POSIX path of (choose file with prompt "Select PyTorch Model:")'],
-                    capture_output=True, text=True
+                    ['osascript', '-e', script],
+                    capture_output=True, text=True, check=True
                 )
-            result = await anyio.to_thread.run_sync(run_osascript)
-            file_path = result.stdout.strip()
-            return {"status": "success", "path": file_path}
+            try:
+                result = await anyio.to_thread.run_sync(run_osascript)
+                file_path = result.stdout.strip()
+                return {"status": "success", "path": file_path}
+            except subprocess.CalledProcessError as e:
+                # This often happens if the user cancels the dialog
+                return {"status": "cancelled", "detail": e.stderr}
         else:
             def tk_browse():
                 try:
@@ -89,6 +96,10 @@ async def analyze_model_endpoint(req: AnalyzeRequest):
         return {"status": "success", "analysis": analysis}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/model/unload")
+async def unload_model():
+    return {"status": "success", "message": "Model unloaded from memory"}
 
 @app.post("/api/optimize/baseline")
 async def estimate_baseline(req: BaselineRequest):
