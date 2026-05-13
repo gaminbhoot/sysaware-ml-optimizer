@@ -14,7 +14,7 @@ SysAware ML Optimizer acts as a real-time telemetry and benchmarking suite. By a
 - **Live Inference Benchmarking:** Measures Time-To-First-Token, Decode Speed, and memory performance under real datasets.
 - **Strict Security Boundaries:** Forces `torch.load(weights_only=True)` by default to prevent arbitrary code execution during serialization.
 - **FastAPI backend & SQLite:** High-performance, lightweight telemetry ingestion backed by persistent local storage.
-- **Interactive TUI & Streamlit GUI:** Beautiful terminal interfaces (Rich) and interactive GUI sandboxes (OctaWipe Streamlit) for dynamic optimization tracking.
+- **Interactive TUI:** Beautiful terminal interface (Rich) for dynamic, local optimization tracking.
 
 ---
 
@@ -68,12 +68,6 @@ python generate_more_dummy_models.py
 
 # Run the TUI optimization workflow
 python main.py --model-path dummy_models/slightly_unoptimized_model.pt --goal compress
-```
-
-### 4. Interactive GUI (Optional)
-If you prefer a sandboxed web UI over the automated background fleets:
-```bash
-streamlit run gui/app.py
 ```
 
 ---
