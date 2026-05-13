@@ -19,35 +19,32 @@ class AccuracyValidator:
             return {"parity_score": 1.0, "status": "skipped (not a torch module)"}
 
         try:
+            # Always evaluate on CPU to avoid:
+            # 1. MPS mixed-dtype assertion (FP32 input vs FP16 model)
+            # 2. quantized::linear_dynamic not implemented on MPS
+            original_cpu = original.cpu() if hasattr(original, "cpu") else original
+            optimized_cpu = optimized.cpu() if hasattr(optimized, "cpu") else optimized
+
             # Create synthetic input based on first parameter shape
-            # This is a heuristic for demonstration
-            first_param = next(original.parameters())
+            first_param = next(original_cpu.parameters())
             if first_param.ndim < 2:
                 return {"parity_score": 1.0, "status": "skipped (simple model)"}
             
-            # Assuming typical (batch, features) or (batch, channels, h, w)
             input_shape = (1,) + first_param.shape[1:]
-            dummy_input = torch.randn(input_shape).to(next(original.parameters()).device)
+            dummy_input = torch.randn(input_shape)  # always CPU
             
-            original.eval()
-            optimized.eval()
+            original_cpu.eval()
+            optimized_cpu.eval()
             
             with torch.no_grad():
-                out_orig = original(dummy_input)
-                # Move optimized to same device as out_orig if needed
-                if hasattr(out_orig, "device"):
-                    dummy_input_opt = dummy_input.to(next(optimized.parameters()).device)
-                    out_opt = optimized(dummy_input_opt).to(out_orig.device)
-                else:
-                    out_opt = optimized(dummy_input)
+                out_orig = original_cpu(dummy_input).float()
+                out_opt = optimized_cpu(dummy_input).float()
 
             if not isinstance(out_orig, torch.Tensor) or not isinstance(out_opt, torch.Tensor):
                 return {"parity_score": 1.0, "status": "skipped (non-tensor output)"}
 
             # Mean Squared Error between original and optimized output
             mse = torch.mean((out_orig - out_opt) ** 2).item()
-            # Parity score: 1.0 is perfect, 0.0 is completely different
-            # We use an exponential decay for the score
             parity_score = max(0.0, 1.0 - mse)
             
             return {

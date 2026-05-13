@@ -132,6 +132,17 @@ def _run_micro_benchmark(model: Any, profile: dict[str, Any]) -> tuple[tuple[flo
 			device_name = "cuda"
 		elif hasattr(getattr(torch, "backends", None), "mps") and getattr(torch.backends, "mps").is_available():
 			device_name = "mps"
+
+	# MPS does not support mixed-dtype matmul (FP32 input vs FP16 model).
+	# Fall back to CPU for FP16 models on Apple Silicon to avoid a fatal assertion.
+	if device_name == "mps":
+		try:
+			first_param = next(model.parameters())
+			if first_param.dtype == torch.float16:
+				device_name = "cpu"
+		except StopIteration:
+			pass
+
 	device = torch.device(device_name)
 
 	input_tensor = _build_dummy_input(model, _get_batch_size(profile))

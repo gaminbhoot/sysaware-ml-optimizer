@@ -105,6 +105,18 @@ SysAware maintains a rigorous quality standard with 200+ regression tests.
 python -m pytest -q
 ```
 
+### Generating Dummy Models for Testing
+If you don't have large PyTorch models locally to test with, you can use the dummy model generation scripts provided to test optimization logic:
+
+```bash
+python generate_more_dummy_models.py
+```
+This generates `dummy_models/optimized_model.pt` and `dummy_models/slightly_unoptimized_model.pt` which you can immediately test against the CLI runner:
+
+```bash
+python main.py --model-path dummy_models/slightly_unoptimized_model.pt --goal compress
+```
+
 ## Future Enhancements (Roadmap)
 
 - **MLOps Connectivity**: Native integration with MLflow and Weights & Biases for experiment tracking.

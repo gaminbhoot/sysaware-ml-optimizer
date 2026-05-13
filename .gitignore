@@ -64,3 +64,8 @@ live-bench/
 .sysaware_cache.json
 IMPLEMENTATION_ROADMAP.md
 patch.py
+generate_dummy_model.py
+generate_more_dummy_models.py
+
+# Dummy models directory for local testing
+dummy_models/

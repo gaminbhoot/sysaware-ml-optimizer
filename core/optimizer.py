@@ -77,6 +77,13 @@ class Int8QuantizationPlugin:
 
         target = _clone_model(model)
         try:
+            # qnnpack is required on macOS/ARM; fbgemm is default on x86
+            cuda_available = torch is not None and getattr(torch, "cuda", None) and torch.cuda.is_available()
+            engine = "fbgemm" if cuda_available else "qnnpack"
+            try:
+                torch.backends.quantized.engine = engine
+            except Exception:
+                pass  # In test mocks torch.backends may not be fully implemented
             optimized = quantize_dynamic(target, quantizable_modules, dtype=qint8)
             return optimized, _base_metadata("int8", "cpu", True, [])
         except Exception as exc:
@@ -115,6 +122,11 @@ class Fp16ConversionPlugin:
                 target = target.to(device_name)
             if hasattr(target, "half"):
                 target = target.half()
+            # MPS does not support mixed-dtype matmul needed for accuracy validation;
+            # move the optimized model to CPU so the validator can run safely.
+            if device_name == "mps" and hasattr(target, "cpu"):
+                target = target.cpu()
+                device_name = "cpu"
             return target, _base_metadata("fp16", device_name, True, [])
         except Exception as exc:
             logger.warning(f"FP16 conversion failed: {exc}")

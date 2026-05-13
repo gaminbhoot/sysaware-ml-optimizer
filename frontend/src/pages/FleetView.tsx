@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Server, Cpu, Zap, History, LayoutGrid, List, Trash2, Activity, Filter, RefreshCcw } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useNotification } from '../context/NotificationContext';
 
 interface NodeData {
   machine_id: string;
@@ -32,6 +33,7 @@ interface TelemetryData {
 }
 
 export const FleetView = () => {
+  const { addNotification } = useNotification();
   const [activeNodes, setActiveNodes] = useState<NodeData[]>([]);
   const [history, setHistory] = useState<TelemetryData[]>([]);
   const [pendingNode, setPendingNode] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export const FleetView = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchData = async () => {
+    const fetchData = async () => {
     setIsRefreshing(true);
     try {
       const [historyRes, nodesRes] = await Promise.all([
@@ -51,10 +53,14 @@ export const FleetView = () => {
       const historyData = await historyRes.json();
       const nodesData = await nodesRes.json();
 
-      if (historyData.status === 'success') setHistory(historyData.history);
-      if (nodesData.status === 'success') setActiveNodes(nodesData.nodes);
+      if (historyData.status === 'success') setHistory(historyData.history || []);
+      if (nodesData.status === 'success') setActiveNodes(nodesData.nodes || []);
     } catch (e) {
-      console.error("Failed to refresh data", e);
+      addNotification({
+        type: 'error',
+        title: 'Sync Failed',
+        message: 'Could not connect to the telemetry server. Retrying...'
+      });
     } finally {
       setIsRefreshing(false);
     }
@@ -110,6 +116,7 @@ export const FleetView = () => {
       if (pollInterval) clearInterval(pollInterval);
     };
 
+    fetchData(); // Initial fetch
     connectStream();
 
     return () => {
@@ -125,25 +132,46 @@ export const FleetView = () => {
     try {
       const res = await fetch(`/api/fleet/node/${id}`, { method: 'DELETE' });
       if (res.ok) {
+        addNotification({
+          type: 'success',
+          message: `Node ${id} removed successfully.`
+        });
         fetchData();
+      } else {
+        throw new Error('Delete failed');
       }
     } catch (e) {
-      console.error("Delete failed", e);
+      addNotification({
+        type: 'error',
+        title: 'Delete Failed',
+        message: `Failed to remove node ${id}.`
+      });
     }
   };
 
   const handleJoinResponse = async (id: string, approve: boolean) => {
     try {
       const endpoint = approve ? '/api/fleet/join/approve' : '/api/fleet/join/reject';
-      await fetch(endpoint, {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ machine_id: id })
       });
+      
+      if (!res.ok) throw new Error('Action failed');
+
       setPendingNode(null);
+      addNotification({
+        type: approve ? 'success' : 'info',
+        message: approve ? `Node ${id} approved.` : `Join request for ${id} declined.`
+      });
       if (approve) fetchData();
     } catch (e) {
-      console.error("Join response failed", e);
+      addNotification({
+        type: 'error',
+        title: 'Action Failed',
+        message: `Could not ${approve ? 'approve' : 'decline'} node ${id}.`
+      });
     }
   };
 
