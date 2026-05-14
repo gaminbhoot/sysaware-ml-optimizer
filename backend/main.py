@@ -9,6 +9,9 @@ import threading
 from pathlib import Path
 from typing import Any
 
+# Ensure the backend directory is in sys.path for module discovery (especially for torch.load)
+sys.path.insert(0, str(Path(__file__).parent))
+
 from core.contracts import GOALS
 from core.estimator import estimate_performance
 from core.logging_utils import get_logger

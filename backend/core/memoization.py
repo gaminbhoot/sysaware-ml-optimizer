@@ -3,7 +3,7 @@ import os
 import hashlib
 from typing import Any, Optional
 
-CACHE_FILE = ".sysaware_cache.json"
+CACHE_FILE = os.path.join(os.path.dirname(__file__), "../../data/.sysaware_cache.json")
 
 def _generate_cache_key(model_hash: str, goal: str, system_profile: dict) -> str:
     """Generates a unique key for the specific model, goal, and hardware setup."""

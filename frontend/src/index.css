@@ -1,5 +1,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,400;0,700;1,400;1,700&family=Quicksand:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
+@font-face {
+  font-family: 'Nistha';
+  src: url('/fonts/nistha.woff2') format('woff2'),
+       url('/fonts/nistha.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -20,8 +29,8 @@
   }
   
   h1 {
-    font-family: "Merriweather", serif;
-    font-weight: 700;
+    font-family: "Nistha", "Merriweather", serif;
+    font-weight: normal;
     color: white;
   }
 
@@ -38,6 +47,10 @@
 }
 
 @layer utilities {
+  .font-nistha {
+    font-family: 'Nistha', serif;
+  }
+
   .glass-card {
     background-color: rgba(255, 255, 255, 0.02);
     backdrop-filter: blur(24px);

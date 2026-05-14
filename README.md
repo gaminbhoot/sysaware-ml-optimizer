@@ -18,6 +18,27 @@ SysAware ML Optimizer acts as a real-time telemetry and benchmarking suite. By a
 
 ---
 
+## 📁 Project Structure
+
+```text
+sysaware-ml-optimizer/
+├── backend/                # FastAPI server and core logic
+│   ├── core/               # Optimization and profiling modules
+│   ├── server.py           # Central telemetry hub
+│   └── main.py             # CLI worker entry point
+├── frontend/               # Vite + React dashboard
+├── gui/                    # Streamlit interface
+├── scripts/                # Utility scripts (dummy model generation)
+├── data/                   # Persistence (SQLite, Caches)
+├── logs/                   # Application logs
+├── artifacts/              # Model weights and temporary files
+├── docs/                   # Documentation and roadmaps
+├── references/             # External reference material
+└── tests/                  # Pytest suite
+```
+
+---
+
 ## 🚀 Quickstart (Docker)
 
 The fastest way to get started is by spinning up the backend and frontend simultaneously via Docker Compose:
@@ -45,6 +66,7 @@ source venv/bin/activate       # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Start the Telemetry Hub (Rest API & UDP Autodiscovery)
+cd backend
 python server.py
 ```
 
@@ -64,10 +86,10 @@ Optimize a model locally. The node will automatically discover the telemetry ser
 source venv/bin/activate
 
 # Optional: Generate some dummy models for testing
-python generate_more_dummy_models.py
+python scripts/generate_more_dummy_models.py
 
 # Run the TUI optimization workflow
-python main.py --model-path dummy_models/slightly_unoptimized_model.pt --goal compress
+python backend/main.py --model-path artifacts/dummy_models/slightly_unoptimized_model.pt --goal compress
 ```
 
 ---
@@ -77,6 +99,8 @@ python main.py --model-path dummy_models/slightly_unoptimized_model.pt --goal co
 SysAware enforces high code quality through a comprehensive test suite. 
 
 ```bash
+# From the project root
+export PYTHONPATH=$PYTHONPATH:$(pwd)/backend
 pytest -v
 ```
 

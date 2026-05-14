@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-DB_PATH = "telemetry.db"
+DB_PATH = os.path.join(os.path.dirname(__file__), "../../data/telemetry.db")
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)

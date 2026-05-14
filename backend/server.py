@@ -9,6 +9,11 @@ import sys
 import subprocess
 import json
 import asyncio
+from pathlib import Path
+
+# Ensure the backend directory is in sys.path
+sys.path.insert(0, str(Path(__file__).parent))
+
 import core.system_profiler as sp
 import core.model_analyzer as ma
 import core.estimator as est
