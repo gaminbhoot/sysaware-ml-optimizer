@@ -1,5 +1,5 @@
-import { createContext, useContext, useState } from 'react';
-import type { ReactNode, Dispatch, SetStateAction } from 'react';
+import { createContext, useContext, useState } from "react";
+import type { ReactNode, Dispatch, SetStateAction } from "react";
 
 interface StoreState {
   systemProfile: any;
@@ -12,6 +12,8 @@ interface StoreState {
   setModelPath: Dispatch<SetStateAction<string>>;
   goal: string;
   setGoal: Dispatch<SetStateAction<string>>;
+  lmStudioHost: string;
+  setLmStudioHost: Dispatch<SetStateAction<string>>;
   // Live Tuning State
   isTuning: boolean;
   setIsTuning: Dispatch<SetStateAction<boolean>>;
@@ -29,12 +31,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [systemProfile, setSystemProfile] = useState<any>(null);
   const [modelAnalysis, setModelAnalysis] = useState<any>(null);
   const [strategy, setStrategy] = useState<any>(null);
-  const [modelPath, setModelPath] = useState('');
-  const [goal, setGoal] = useState('latency');
+  const [modelPath, setModelPath] = useState("");
+  const [goal, setGoal] = useState("latency");
+  const [lmStudioHost, setLmStudioHost] = useState("127.0.0.1");
   
   // Live Tuning
   const [isTuning, setIsTuning] = useState(false);
-  const [tuningProgress, setTuningProgress] = useState('Idle');
+  const [tuningProgress, setTuningProgress] = useState("Idle");
   const [tuningCandidates, setTuningCandidates] = useState<any[]>([]);
   const [winningConfig, setWinningConfig] = useState<any>(null);
 
@@ -45,6 +48,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       strategy, setStrategy,
       modelPath, setModelPath,
       goal, setGoal,
+      lmStudioHost, setLmStudioHost,
       isTuning, setIsTuning,
       tuningProgress, setTuningProgress,
       tuningCandidates, setTuningCandidates,
@@ -57,6 +61,6 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
 export const useStore = () => {
   const context = useContext(StoreContext);
-  if (!context) throw new Error('useStore must be used within StoreProvider');
+  if (!context) throw new Error("useStore must be used within StoreProvider");
   return context;
 };

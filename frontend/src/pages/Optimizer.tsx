@@ -3,23 +3,24 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, Target, ArrowRight, Activity, Database, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { useNavigate } from 'react-router-dom';
+import { cn } from '../lib/utils';
 
 const StepProgressBar = ({ status }: { status: string }) => {
   const stages = ['starting', 'evaluating', 'scoring', 'complete'];
-  const labels = ['Preparation', 'Evaluation', 'Scoring', 'Finalized'];
+  const labels = ['Prep', 'Eval', 'Scoring', 'Final'];
   
   const currentIndex = stages.indexOf(status.split('_')[0]); 
   const effectiveIndex = status === 'complete' ? 3 : currentIndex >= 0 ? currentIndex : 1;
 
   return (
-    <div className="w-full mb-12">
+    <div className="w-full mb-8 md:mb-12">
       <div className="flex justify-between mb-4">
         {labels.map((label, i) => (
           <div key={label} className="flex flex-col items-center gap-2">
-            <div className={`w-3 h-3 rounded-full transition-all duration-500 ${
+            <div className={`w-2 h-2 md:w-3 md:h-3 rounded-full transition-all duration-500 ${
               i <= effectiveIndex ? 'bg-emerald shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-white/10'
             }`} />
-            <span className={`text-[10px] font-mono uppercase tracking-widest ${
+            <span className={`text-[8px] md:text-[10px] font-mono uppercase tracking-widest ${
               i <= effectiveIndex ? 'text-white' : 'text-white/20'
             }`}>{label}</span>
           </div>
@@ -39,15 +40,15 @@ const StepProgressBar = ({ status }: { status: string }) => {
 const MetricValue = ({ value, unit }: { value: number, unit: string }) => {
   return (
     <div className="flex flex-col items-end">
-      <div className="text-[10px] text-white/30 uppercase font-mono tracking-tighter">{unit}</div>
+      <div className="text-[9px] md:text-[10px] text-white/30 uppercase font-mono tracking-tighter">{unit}</div>
       <motion.div 
         key={value}
         initial={{ y: 2, opacity: 0.5 }}
         animate={{ y: 0, opacity: 1 }}
-        className="text-white font-mono text-sm tabular-nums"
+        className="text-white font-mono text-xs md:text-sm tabular-nums"
       >
         {value.toFixed(1)}
-        <span className="text-[10px] ml-0.5 text-white/40">{unit === 'Latency' ? 'ms' : 'MB'}</span>
+        <span className="text-[9px] ml-0.5 text-white/40">{unit === 'Latency' ? 'ms' : 'MB'}</span>
       </motion.div>
     </div>
   );
@@ -58,18 +59,18 @@ const CandidateCard = ({ candidate }: { candidate: any }) => (
     initial={{ opacity: 0, x: -20, scale: 0.95 }}
     animate={{ opacity: 1, x: 0, scale: 1 }}
     transition={{ type: 'spring', stiffness: 100, damping: 15 }}
-    className="glass-card p-4 flex items-center justify-between border-emerald/20 bg-emerald/5 hover:bg-emerald/10 transition-colors"
+    className="glass-card p-4 flex items-center justify-between border-emerald/20 bg-emerald/5 hover:bg-emerald/10 transition-colors gap-4"
   >
-    <div className="flex items-center gap-4">
-      <div className="p-2 rounded-lg bg-emerald/10 text-emerald">
+    <div className="flex items-center gap-3 md:gap-4 min-w-0">
+      <div className="p-2 rounded-lg bg-emerald/10 text-emerald shrink-0">
         <Activity size={16} />
       </div>
-      <div>
-        <div className="font-mono text-xs uppercase tracking-widest text-white">{candidate.candidate}</div>
-        <div className="text-[10px] text-white/40 font-mono italic">{(candidate.metadata?.method || 'Quantized').toUpperCase()}</div>
+      <div className="min-w-0">
+        <div className="font-mono text-[10px] md:text-xs uppercase tracking-widest text-white truncate">{candidate.candidate}</div>
+        <div className="text-[9px] md:text-[10px] text-white/40 font-mono italic truncate">{(candidate.metadata?.method || 'Quantized').toUpperCase()}</div>
       </div>
     </div>
-    <div className="flex gap-8">
+    <div className="flex gap-4 md:gap-8 shrink-0">
       <MetricValue value={candidate.result?.latency_range_ms[1]} unit="Latency" />
       <MetricValue value={candidate.result?.memory_mb} unit="Memory" />
     </div>
@@ -172,19 +173,19 @@ export const Optimizer = () => {
   const isReady = !!systemProfile && !!modelPath;
 
   return (
-    <div className="p-8 md:p-24 max-w-[1600px] mx-auto w-full h-full flex flex-col">
+    <div className="p-6 md:p-12 lg:p-24 max-w-[1600px] mx-auto w-full h-full flex flex-col">
       <motion.div
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="mb-16"
+        className="mb-12 md:mb-16"
       >
-        <h1 className="text-luxury-header !text-4xl md:!text-6xl">Optimization Engine</h1>
-        <p className="text-luxury-subheading mt-4 text-white/40 !text-base italic">Real-time hardware-aware autotuning</p>
+        <h1 className="text-luxury-header !text-3xl md:!text-5xl lg:!text-6xl">Optimization Engine</h1>
+        <p className="text-luxury-subheading mt-2 md:mt-4 text-white/40 !text-sm md:!text-base italic">Real-time hardware-aware autotuning</p>
       </motion.div>
 
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-8 flex-1">
-        <div className="col-span-1 md:col-span-8 flex flex-col gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 flex-1">
+        <div className="col-span-1 lg:col-span-8 flex flex-col gap-8 order-2 lg:order-1">
           <AnimatePresence mode="wait">
             {!isTuning ? (
               <motion.div
@@ -192,7 +193,7 @@ export const Optimizer = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="glass-card p-8 flex flex-col gap-8"
+                className="glass-card p-6 md:p-8 flex flex-col gap-8"
               >
                 <div>
                   <h3 className="text-luxury-subheading mb-4 !text-lg">Optimization Target</h3>
@@ -201,14 +202,15 @@ export const Optimizer = () => {
                       <button
                         key={g}
                         onClick={() => setGoal(g)}
-                        className={`p-6 rounded-xl border flex flex-col items-center justify-center gap-3 transition-all ${
+                        className={cn(
+                          "p-5 md:p-6 rounded-xl border flex flex-col items-center justify-center gap-3 transition-all",
                           goal === g 
                             ? 'bg-white/10 border-white/30 shadow-[inset_0_0_20px_rgba(255,255,255,0.05)]' 
                             : 'bg-black/40 border-white/5 hover:bg-white/5'
-                        }`}
+                        )}
                       >
                         <Target size={20} className={goal === g ? 'text-white' : 'text-white/30'} />
-                        <span className="font-mono text-xs tracking-widest uppercase text-white/80">{g}</span>
+                        <span className="font-mono text-[10px] md:text-xs tracking-widest uppercase text-white/80">{g}</span>
                       </button>
                     ))}
                   </div>
@@ -218,7 +220,7 @@ export const Optimizer = () => {
                   <button
                     onClick={startTuning}
                     disabled={!isReady}
-                    className="w-full py-6 rounded-xl bg-white text-black font-sans font-bold text-lg hover:bg-silver transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed group"
+                    className="w-full py-5 md:py-6 rounded-xl bg-white text-black font-sans font-bold text-base md:text-lg hover:bg-silver transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed group"
                   >
                     <Zap size={20} /> Launch Live Tuning
                     <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
@@ -236,7 +238,7 @@ export const Optimizer = () => {
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 1.02 }}
-                className="glass-card p-8 flex flex-col gap-8 relative overflow-hidden"
+                className="glass-card p-6 md:p-8 flex flex-col gap-8 relative overflow-hidden"
               >
                 <div className="absolute inset-0 bg-emerald/5 pointer-events-none overflow-hidden">
                   <motion.div 
@@ -247,17 +249,17 @@ export const Optimizer = () => {
                 </div>
 
                 <div className="relative z-10">
-                  <div className="flex justify-between items-start mb-8">
+                  <div className="flex flex-col sm:flex-row justify-between items-start mb-8 gap-4">
                     <div>
                       <h3 className="text-luxury-subheading !text-lg flex items-center gap-2">
                         <Activity className="text-emerald animate-pulse" size={18} /> 
                         Live Tuning Session
                       </h3>
-                      <div className="font-mono text-[11px] text-white/30 mt-1 uppercase tracking-widest flex items-center gap-2">
+                      <div className="font-mono text-[10px] md:text-[11px] text-white/30 mt-1 uppercase tracking-widest flex items-center gap-2">
                         Status: <span className="text-emerald tabular-nums">{tuningProgress}</span>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="sm:text-right">
                       <div className="text-[10px] text-white/30 uppercase font-mono tracking-widest">Goal</div>
                       <div className="text-white font-mono text-sm uppercase">{goal}</div>
                     </div>
@@ -271,10 +273,10 @@ export const Optimizer = () => {
                         <motion.div 
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
-                          className="py-20 flex flex-col items-center justify-center gap-4 text-white/20"
+                          className="py-16 md:py-20 flex flex-col items-center justify-center gap-4 text-white/20"
                         >
-                          <div className="w-12 h-12 border-2 border-white/5 border-t-white/20 rounded-full animate-spin" />
-                          <span className="font-mono text-[10px] uppercase tracking-[0.2em]">Acquiring Hardware Hooks...</span>
+                          <div className="w-10 h-10 md:w-12 md:h-12 border-2 border-white/5 border-t-white/20 rounded-full animate-spin" />
+                          <span className="font-mono text-[9px] md:text-[10px] uppercase tracking-[0.2em] text-center px-4">Acquiring Hardware Hooks...</span>
                         </motion.div>
                       )}
                       {tuningCandidates.map((c) => (
@@ -291,23 +293,27 @@ export const Optimizer = () => {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-3 text-red-400 font-mono text-xs"
+              className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-3 text-red-400 font-mono text-[10px] md:text-xs"
             >
-              <ShieldAlert size={16} />
+              <ShieldAlert size={16} className="shrink-0" />
               {error}
             </motion.div>
           )}
         </div>
 
-        <div className="col-span-1 md:col-span-4">
-          <div className="glass-card p-8 sticky top-24">
+        <div className="col-span-1 lg:col-span-4 order-1 lg:order-2">
+          <div className="glass-card p-6 md:p-8 lg:sticky lg:top-24 border-white/5">
             <h3 className="text-luxury-subheading mb-6 flex items-center gap-2 !text-lg">
-              <Database size={14} className="text-white/40" /> Active Profile
+              <Database size={14} className="text-white/40" /> Active Context
             </h3>
             <div className="flex flex-col gap-6">
               <div className="space-y-1">
-                <div className="text-[10px] text-white/30 uppercase font-mono tracking-widest">Accelerator</div>
+                <div className="text-[10px] text-white/30 uppercase font-mono tracking-widest">Hardware</div>
                 <div className="text-white font-mono text-xs">{(systemProfile?.gpu_backend || 'CPU').toUpperCase()}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-[10px] text-white/30 uppercase font-mono tracking-widest">VRAM Available</div>
+                <div className="text-white font-mono text-xs">{(systemProfile?.ram_available_gb || 0).toFixed(1)} GB</div>
               </div>
               <div className="space-y-1">
                 <div className="text-[10px] text-white/30 uppercase font-mono tracking-widest">Model</div>
@@ -316,7 +322,7 @@ export const Optimizer = () => {
               <div className="pt-6 border-t border-white/10">
                 <div className="flex items-center gap-2 text-emerald/60">
                   <CheckCircle2 size={12} />
-                  <span className="text-[10px] font-mono uppercase tracking-widest">Secure Handshake Active</span>
+                  <span className="text-[9px] md:text-[10px] font-mono uppercase tracking-widest">Secure Handshake Active</span>
                 </div>
               </div>
             </div>

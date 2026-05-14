@@ -121,4 +121,23 @@ describe('FleetView Robustness', () => {
     expect(screen.getByText('Join Request')).toBeInTheDocument();
     expect(screen.getByText('new_node_id')).toBeInTheDocument();
   });
+
+  it('renders charts tab and switches correctly', async () => {
+    (fetch as any).mockResolvedValue({
+      json: async () => ({ status: 'success', history: [], nodes: [] })
+    });
+
+    renderWithProviders(<FleetView />);
+
+    const chartsTab = screen.getByText('Charts');
+    expect(chartsTab).toBeInTheDocument();
+
+    await act(async () => {
+      chartsTab.click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Fleet Performance Benchmark')).toBeInTheDocument();
+    });
+  });
 });

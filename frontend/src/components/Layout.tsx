@@ -4,9 +4,10 @@ import { AnimatePresence, motion } from 'framer-motion';
 
 export const Layout = () => {
   const location = useLocation();
+  const isHome = location.pathname === '/';
 
   return (
-    <div className="min-h-screen bg-background text-silver font-sans overflow-x-hidden flex">
+    <div className="min-h-screen bg-[#050505] text-[#E0E0E0] font-sans overflow-x-hidden flex flex-col md:flex-row">
       {/* Dynamic Radial Gradient Background */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] max-w-[1000px] max-h-[1000px] bg-radial-fade opacity-80" />
@@ -14,7 +15,7 @@ export const Layout = () => {
 
       <Sidebar />
 
-      <main className={location.pathname === '/' ? "flex-1 w-full relative z-10" : "flex-1 w-full pl-24 relative z-10"}>
+      <main className={isHome ? "flex-1 w-full relative z-10" : "flex-1 w-full md:pl-24 pb-20 md:pb-0 relative z-10"}>
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}

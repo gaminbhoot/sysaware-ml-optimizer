@@ -17,6 +17,7 @@ import core.prompt_optimizer as po
 import core.autotuner as at
 import core.store as store
 import core.autodiscovery as discovery
+import core.lmstudio as lms
 from main import load_model_from_path
 
 app = FastAPI(title="SysAware ML Optimizer API")
@@ -92,6 +93,10 @@ class TelemetryReport(BaseModel):
     decode_tokens_per_sec: float | None = None
     prefill_latency_ms: float | None = None
 
+class LMStudioSyncRequest(BaseModel):
+    host: str = "127.0.0.1"
+    port: int = 1234
+
 # --- Background Tasks ---
 async def server_heartbeat_task():
     """Periodically sends a heartbeat for the machine running the server."""
@@ -149,6 +154,25 @@ async def get_telemetry_history():
     try:
         history = await anyio.to_thread.run_sync(store.get_recent_telemetry)
         return {"status": "success", "history": history}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/telemetry/history")
+async def clear_telemetry(range_type: str = "all"):
+    try:
+        await anyio.to_thread.run_sync(store.clear_telemetry_history, range_type)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/lmstudio/sync")
+async def sync_lmstudio(req: LMStudioSyncRequest):
+    try:
+        client = lms.LMStudioClient(host=req.host, port=req.port)
+        analysis = await anyio.to_thread.run_sync(client.sync_loaded_model)
+        if not analysis:
+            raise HTTPException(status_code=404, detail="No loaded model found in LM Studio or connection failed")
+        return {"status": "success", "analysis": analysis}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -237,7 +261,6 @@ async def add_to_blacklist(entry: BlacklistEntry):
 @app.get("/api/system")
 async def get_system():
     try:
-        # System profiling is usually fast but involves subprocesses/IORegistry on Darwin
         profile = await anyio.to_thread.run_sync(sp.get_system_profile)
         return {"status": "success", "profile": profile}
     except Exception as e:
@@ -247,7 +270,6 @@ async def get_system():
 async def browse_model():
     try:
         if sys.platform == "darwin":
-            # Using anyio.to_thread.run_sync to avoid blocking the event loop
             def run_osascript():
                 script = 'POSIX path of (choose file with prompt "Select PyTorch Model:")'
                 return subprocess.run(
@@ -259,7 +281,6 @@ async def browse_model():
                 file_path = result.stdout.strip()
                 return {"status": "success", "path": file_path}
             except subprocess.CalledProcessError as e:
-                # This often happens if the user cancels the dialog
                 return {"status": "cancelled", "detail": e.stderr}
         else:
             def tk_browse():
@@ -306,7 +327,6 @@ async def estimate_baseline(req: BaselineRequest):
 @app.post("/api/optimize/strategy")
 async def generate_strategy(req: StrategyRequest):
     try:
-        # Strategy calculation is pure logic, but we run in thread for consistency
         strategy = await anyio.to_thread.run_sync(se.get_strategy, req.system_profile, req.goal, req.model_analysis)
         return {"status": "success", "strategy": strategy}
     except Exception as e:
@@ -324,8 +344,6 @@ async def optimize_prompt(req: PromptRequest):
 async def autotune_endpoint(req: AutotuneRequest):
     try:
         model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
-        # Autotune now internally uses a ThreadPool for candidates, 
-        # but we wrap the whole call in run_sync to keep the FastAPI event loop free.
         best_config, _, best_result = await anyio.to_thread.run_sync(at.autotune, model_obj, req.system_profile, req.goal)
         return {
             "status": "success", 
@@ -338,16 +356,12 @@ async def autotune_endpoint(req: AutotuneRequest):
 @app.post("/api/optimize/autotune/stream")
 async def autotune_stream_endpoint(req: AutotuneRequest):
     try:
-        # Load model first (blocking but in thread)
         model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
         
         async def event_generator():
-            # Create the generator
             gen = at.autotune_generator(model_obj, req.system_profile, req.goal)
-            
             while True:
                 try:
-                    # Execute next(gen) in a separate thread to avoid blocking the event loop
                     update = await anyio.to_thread.run_sync(next, gen)
                     yield f"data: {json.dumps(update)}\n\n"
                 except StopIteration:
@@ -359,7 +373,6 @@ async def autotune_stream_endpoint(req: AutotuneRequest):
         return StreamingResponse(event_generator(), media_type="text/event-stream")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 # --- Serve React Frontend ---
 if os.path.exists("frontend/dist"):

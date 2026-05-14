@@ -197,3 +197,19 @@ def get_recent_telemetry(limit=50):
         d['latency_range'] = json.loads(d['latency_range'])
         results.append(d)
     return results
+
+def clear_telemetry_history(range_type="all"):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    if range_type == "today":
+        cursor.execute("DELETE FROM telemetry WHERE timestamp >= datetime('now', 'start of day')")
+    elif range_type == "week":
+        cursor.execute("DELETE FROM telemetry WHERE timestamp >= datetime('now', '-7 days')")
+    elif range_type == "month":
+        cursor.execute("DELETE FROM telemetry WHERE timestamp >= datetime('now', '-30 days')")
+    else:  # all
+        cursor.execute("DELETE FROM telemetry")
+        
+    conn.commit()
+    conn.close()
