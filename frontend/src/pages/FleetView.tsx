@@ -253,14 +253,7 @@ export const FleetView = () => {
       {/* Header Section */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-12 lg:mb-16 gap-8">
         <div>
-          <div className="flex items-center gap-3 mb-4">
-            <div className={cn(
-              "w-2 h-2 rounded-full",
-              isConnected ? "bg-emerald shadow-[0_0_8px_#10B981]" : "bg-red-500 shadow-[0_0_8px_#EF4444]"
-            )} />
-            <span className="text-luxury-mono">SysAware Fleet Management</span>
-          </div>
-          <h1 className="text-4xl md:text-5xl lg:text-6xl mb-2 text-white tracking-tighter">Infrastructure</h1>
+          <h1 className="text-luxury-header mb-2 tracking-tighter">Infrastructure</h1>
           <p className="text-luxury-subheading text-white/50 text-sm md:text-base max-w-xl font-light">Manage active benchmarking nodes and historical performance data across your distributed system.</p>
         </div>
 
@@ -450,12 +443,11 @@ const LiveNodeCard = ({ node, onDelete }: { node: NodeData, onDelete: () => void
     <div className="glass-card p-6 md:p-8 group hover:bg-white/[0.04] transition-all relative overflow-hidden border-white/10">
       <div className="flex justify-between items-start mb-6">
         <div className="min-w-0">
-           <div className="flex items-center gap-2 mb-2">
-             <div className="w-1.5 h-1.5 rounded-full bg-emerald animate-pulse" />
-             <span className="text-luxury-mono text-[9px] uppercase tracking-widest text-emerald font-bold">Active</span>
-             {isServer && <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[8px] font-black tracking-tighter uppercase">CORE SERVER</span>}
-           </div>
-           <h4 className="text-lg md:text-xl text-white font-medium truncate pr-4">{node.machine_id.split('_')[0]}</h4>
+            <div className="flex items-center gap-2 mb-2">
+              {isServer && <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[8px] font-black tracking-tighter uppercase">CORE SERVER</span>}
+            </div>
+            <h4 className="text-lg md:text-xl text-white font-medium truncate pr-4">{node.machine_id.split('_')[0]}</h4>
+
            <p className="text-xs text-white/40 mt-1 truncate">{node.hardware_profile.cpu || 'Unknown CPU'}</p>
         </div>
         <button 

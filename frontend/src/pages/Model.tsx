@@ -71,11 +71,7 @@ export const ModelAnalysis = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
         >
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-px w-8 bg-silver/50" />
-            <span className="text-luxury-mono text-[10px] tracking-[0.3em] uppercase text-silver">Architecture Lab</span>
-          </div>
-          <h1 className="text-luxury-header !text-4xl md:!text-7xl mb-4">Model Inspection</h1>
+          <h1 className="text-luxury-header mb-4">Model Inspection</h1>
           <p className="text-luxury-subheading text-white/40 max-w-2xl">
             Detect and profile models via local filesystem or active LM Studio server instances.
           </p>
@@ -210,13 +206,6 @@ export const ModelAnalysis = () => {
                         <Trash2 size={20} />
                       </button>
                     )}
-                  </div>
-                  
-                  <div className="flex items-center gap-3 px-4 py-2 bg-white/5 rounded-xl border border-white/5">
-                    <div className={`w-2 h-2 rounded-full ${modelAnalysis ? 'bg-emerald animate-pulse' : 'bg-white/10'}`} />
-                    <span className="text-[10px] font-mono text-white/40 uppercase tracking-tighter">
-                      {modelAnalysis ? 'Active Analysis' : 'Awaiting ingest'}
-                    </span>
                   </div>
                 </div>
               </div>

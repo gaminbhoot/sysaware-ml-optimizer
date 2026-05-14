@@ -54,7 +54,7 @@ export const Profiler = () => {
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           className="flex-1"
         >
-           <h1 className="text-luxury-header !text-3xl md:!text-5xl lg:!text-6xl text-white">System Profiler</h1>
+           <h1 className="text-luxury-header">System Profiler</h1>
            <p className="text-luxury-subheading mt-2 md:mt-4 text-white/40 !text-sm md:!text-base">Hardware telemetry & resource mapping</p>
         </motion.div>
 

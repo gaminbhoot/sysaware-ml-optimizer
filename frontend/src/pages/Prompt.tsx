@@ -50,11 +50,7 @@ export const Prompts = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
         >
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-px w-8 bg-emerald/50" />
-            <span className="text-luxury-mono text-[10px] tracking-[0.3em] uppercase text-emerald">Neural Engine</span>
-          </div>
-          <h1 className="text-luxury-header !text-4xl md:!text-7xl mb-4">Prompt Engine</h1>
+          <h1 className="text-luxury-header mb-4">Prompt Engine</h1>
           <p className="text-luxury-subheading text-white/40 max-w-2xl">
             Semantic intent restructuring for maximal LLM efficiency. We recursively strip syntactic fluff and optimize for token-to-meaning ratio.
           </p>

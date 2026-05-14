@@ -74,7 +74,8 @@ export const Results = () => {
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         className="mb-12 md:mb-16"
       >
-        <h1 className="text-luxury-header !text-3xl md:!text-5xl lg:!text-6xl">Optimization Report</h1>
+        <h1 className="text-luxury-header">Optimization Report</h1>
+
         <p className="text-luxury-subheading mt-2 md:mt-4 text-emerald !text-sm md:!text-base">System-aware strategy compiled successfully</p>
       </motion.div>
 
