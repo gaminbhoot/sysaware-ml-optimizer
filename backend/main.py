@@ -340,7 +340,7 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
 	server_url = args.server
 	
 	# Start TUI Live View
-	from rich.console import Console
+	from core.tui import Console
 	live_console = Console(file=sys.stderr) if getattr(args, "json", False) else None
 	with Live(tui.layout, refresh_per_second=4, screen=not args.json, console=live_console):
 		# Autodiscovery logic
@@ -459,15 +459,15 @@ def main(argv: list[str] | None = None) -> int:
 		deploy_path = export_deployment_artifacts(report)
 		logger.info(f"Deployment artifacts generated at: {deploy_path}")
 		if not args.json:
-			from rich.panel import Panel
+			from core.tui import Panel
 			from core.tui import console
 			console.print(Panel(f"[bold green]✓ Deployment Artifacts Exported[/]\\nLocation: [cyan]{deploy_path}[/]", title="Export-to-Deploy", border_style="green"))
 
 	if args.simulate:
 		sim_report = simulate_performance(report, args.simulate)
 		if sim_report and not args.json:
-			from rich.table import Table
-			from rich.panel import Panel
+			from core.tui import Table
+			from core.tui import Panel
 			from core.tui import console
 			
 			table = Table(title=f"[bold yellow]Virtual Simulation: {sim_report['target_hardware']}[/]", box=box.ROUNDED)
