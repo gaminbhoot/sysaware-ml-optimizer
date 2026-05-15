@@ -6,7 +6,7 @@ import { NotificationProvider } from '../context/NotificationContext';
 import { NotificationContainer } from '../components/Notification';
 
 // Mock the API calls
-global.fetch = vi.fn();
+vi.stubGlobal('fetch', vi.fn());
 
 describe('FleetView Robustness', () => {
   beforeEach(() => {

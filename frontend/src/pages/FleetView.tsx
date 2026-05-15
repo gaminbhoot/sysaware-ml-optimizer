@@ -102,10 +102,21 @@ export const FleetView = () => {
       eventSource.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
+          
+          // Basic schema validation
+          if (!message || typeof message !== 'object') return;
+
           if (message.type === 'telemetry') {
+            const data = message.data;
+            if (!data || !data.machine_id) {
+              console.warn("Received malformed telemetry message", message);
+              return;
+            }
+
             setHistory(prev => {
-              const newData = message.data;
+              const newData = data;
               if (!newData.timestamp) newData.timestamp = new Date().toISOString();
+              // Use a robust deduplication filter
               const updated = [newData, ...prev.filter(h => 
                 !(h.machine_id === newData.machine_id && h.timestamp === newData.timestamp)
               )];
@@ -113,7 +124,7 @@ export const FleetView = () => {
             });
             
             setActiveNodes(prev => {
-              const nodeIndex = prev.findIndex(n => n.machine_id === message.data.machine_id);
+              const nodeIndex = prev.findIndex(n => n.machine_id === data.machine_id);
               if (nodeIndex === -1) return prev; 
               const updated = [...prev];
               updated[nodeIndex] = {
@@ -124,7 +135,9 @@ export const FleetView = () => {
               return updated;
             });
           } else if (message.type === 'join_request') {
-            setPendingNode(message.machine_id);
+            if (message.machine_id) {
+              setPendingNode(message.machine_id);
+            }
           }
         } catch (e) {
           console.error("Failed to parse SSE message", e);
