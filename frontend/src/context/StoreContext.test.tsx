@@ -1,7 +1,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { StoreProvider, useStore } from '../context/StoreContext';
-import { ReactNode } from 'react';
+import { type ReactNode } from 'react';
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <StoreProvider>{children}</StoreProvider>

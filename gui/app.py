@@ -268,28 +268,10 @@ col_left, col_mid, col_right = st.columns([1.1, 1.3, 1.6], gap="large")
 # ═══════════════════════════════════════════════════════════════════════════════
 with col_left:
 
-    col_reset, col_unload = st.columns(2)
-    with col_reset:
-        if st.button("↺ Reset Session", key="btn_reset"):
-            clear_pipeline_state(st.session_state)
-            st.success("Session cleared.")
-            st.rerun()
-
-    with col_unload:
-        if st.button("🗑 Unload Model", key="btn_unload"):
-            keys_to_del = ["model", "model_analysis", "strategy", "best_config", "best_model", "best_result"]
-            for k in keys_to_del:
-                if k in st.session_state:
-                    del st.session_state[k]
-            
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-                torch.mps.empty_cache()
-            
-            st.success("Model successfully unloaded from memory.")
-            st.rerun()
+    if st.button("↺ Reset Session", key="btn_reset"):
+        clear_pipeline_state(st.session_state)
+        st.success("Session cleared.")
+        st.rerun()
 
     st.markdown('<div class="octa-section">01 / System Profile</div>', unsafe_allow_html=True)
 

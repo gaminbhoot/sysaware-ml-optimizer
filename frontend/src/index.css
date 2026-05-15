@@ -9,18 +9,49 @@
   font-display: swap;
 }
 
+:root {
+  /* Colors */
+  --color-bg-base: #050505;
+  --color-bg-surface: #111111;
+  --color-bg-glass: rgba(255, 255, 255, 0.02);
+  
+  --color-border-subtle: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.15);
+  
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #E0E0E0; /* Silver */
+  --color-text-muted: #9CA3AF;
+  
+  --color-accent-emerald: #10B981;
+
+  /* Typography */
+  --font-family-display: "Nistha", serif;
+  --font-family-serif: "Merriweather", serif;
+  --font-family-sans: "Quicksand", sans-serif;
+  --font-family-mono: "JetBrains Mono", monospace;
+
+  /* Spacing (8pt Grid) */
+  --space-1: 0.25rem; /* 4px */
+  --space-2: 0.5rem;  /* 8px */
+  --space-3: 0.75rem; /* 12px */
+  --space-4: 1rem;    /* 16px */
+  --space-6: 1.5rem;  /* 24px */
+  --space-8: 2rem;    /* 32px */
+  --space-12: 3rem;   /* 48px */
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   body {
-    background-color: #050505;
-    color: #E0E0E0;
+    background-color: var(--color-bg-base);
+    color: var(--color-text-secondary);
     overflow-x: hidden;
     user-select: none;
     -webkit-user-select: none;
-    font-family: "Quicksand", sans-serif;
+    font-family: var(--font-family-sans);
   }
   
   input, textarea {
@@ -29,20 +60,20 @@
   }
   
   h1 {
-    font-family: "Nistha", serif;
+    font-family: var(--font-family-display);
     font-weight: normal;
-    color: white;
+    color: var(--color-text-primary);
   }
 
   h2, h3, h4 {
-    font-family: "Merriweather", serif;
+    font-family: var(--font-family-serif);
     font-style: italic;
     font-weight: 400;
-    color: white;
+    color: var(--color-text-primary);
   }
 
   p, span, div {
-    font-family: "Quicksand", sans-serif;
+    font-family: var(--font-family-sans);
   }
 }
 

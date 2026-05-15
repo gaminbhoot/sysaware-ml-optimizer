@@ -15,14 +15,10 @@ export const HomeGradient = () => {
             pointerEvents: 'none'
           }}
           fov={40}
-          pixelRatio={1}
         >
           <ShaderGradient
             control="props"
             animate="on"
-            axesHelper="off"
-            bgColor1="#000000"
-            bgColor2="#000000"
             brightness={1.5}
             cAzimuthAngle={138}
             cDistance={1.5}
@@ -31,11 +27,7 @@ export const HomeGradient = () => {
             color1="#809bd6"
             color2="#910aff"
             color3="#af38ff"
-            destination="onCanvas"
-            embedMode="off"
             envPreset="city"
-            fov={40}
-            gizmoHelper="hide"
             grain="on"
             lightType="3d"
             positionX={0}

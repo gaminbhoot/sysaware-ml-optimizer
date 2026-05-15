@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import MutableMapping
 from typing import Any, Sequence
 
 PIPELINE_STATE_KEYS = (
@@ -20,7 +19,7 @@ PIPELINE_STATE_KEYS = (
 )
 
 
-def clear_pipeline_state(session_state: MutableMapping[str, Any]) -> list[str]:
+def clear_pipeline_state(session_state: Any) -> list[str]:
     removed: list[str] = []
     for key in PIPELINE_STATE_KEYS:
         if key in session_state:
@@ -44,5 +43,5 @@ def format_gpu_name(name: str | None) -> str:
     return name if name else "None"
 
 
-def has_required_inputs(session_state: MutableMapping[str, Any]) -> bool:
+def has_required_inputs(session_state: Any) -> bool:
     return "model" in session_state and "system_profile" in session_state

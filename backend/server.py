@@ -25,7 +25,20 @@ import core.autodiscovery as discovery
 import core.lmstudio as lms
 from main import load_model_from_path
 
-app = FastAPI(title="SysAware ML Optimizer API")
+from contextlib import asynccontextmanager
+
+# --- Lifecycle ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handles startup and shutdown events."""
+    # Start background tasks
+    asyncio.create_task(server_heartbeat_task())
+    # Start UDP Discovery Beacon on port 8000
+    discovery.start_beacon(api_port=8000)
+    yield
+    # Cleanup if needed
+
+app = FastAPI(title="SysAware ML Optimizer API", lifespan=lifespan)
 
 # Initialize DB
 store.init_db()
@@ -119,12 +132,6 @@ async def server_heartbeat_task():
             print(f"Error in server heartbeat: {e}")
         await asyncio.sleep(30)
 
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(server_heartbeat_task())
-    # Start UDP Discovery Beacon on port 8000
-    discovery.start_beacon(api_port=8000)
-
 # --- API Routes ---
 @app.post("/api/telemetry/ingest")
 async def ingest_telemetry(report: TelemetryReport):
@@ -155,9 +162,9 @@ async def stream_telemetry():
     return StreamingResponse(broker.subscribe(), media_type="text/event-stream")
 
 @app.get("/api/telemetry/history")
-async def get_telemetry_history():
+async def get_telemetry_history(limit: int = 50, offset: int = 0):
     try:
-        history = await anyio.to_thread.run_sync(store.get_recent_telemetry)
+        history = await anyio.to_thread.run_sync(store.get_recent_telemetry, limit, offset)
         return {"status": "success", "history": history}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -305,13 +312,35 @@ async def browse_model():
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 
+# --- Caching ---
+_analysis_cache = {}
+
+def get_cached_analysis(model_path: str):
+    mtime = os.path.getmtime(model_path)
+    cache_key = f"{model_path}_{mtime}"
+    return _analysis_cache.get(cache_key)
+
+def set_cached_analysis(model_path: str, analysis: dict):
+    mtime = os.path.getmtime(model_path)
+    cache_key = f"{model_path}_{mtime}"
+    # Simple LRU-like behavior: clear if too large
+    if len(_analysis_cache) > 20:
+        _analysis_cache.clear()
+    _analysis_cache[cache_key] = analysis
+
 @app.post("/api/model/analyze")
 async def analyze_model_endpoint(req: AnalyzeRequest):
     if not os.path.exists(req.model_path):
         raise HTTPException(status_code=404, detail="Model path not found")
+    
+    cached = get_cached_analysis(req.model_path)
+    if cached:
+        return {"status": "success", "analysis": cached, "cached": True}
+
     try:
         model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
         analysis = await anyio.to_thread.run_sync(ma.analyze_model, model_obj)
+        set_cached_analysis(req.model_path, analysis)
         return {"status": "success", "analysis": analysis}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
