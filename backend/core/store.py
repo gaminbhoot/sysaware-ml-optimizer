@@ -65,7 +65,69 @@ def init_db():
                 timestamp DATETIME
             )
         """)
+
+        # Senior ML Engineer: Model Registry for Versioning and Reference Baselining
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_registry (
+                model_hash TEXT PRIMARY KEY,
+                model_name TEXT,
+                reference_latency REAL,
+                reference_memory_mb REAL,
+                reference_throughput REAL,
+                metadata TEXT,
+                timestamp DATETIME
+            )
+        """)
         conn.commit()
+
+def register_reference_model(model_hash: str, name: str, latency: float, memory: float, throughput: float = 0.0, metadata: dict = None):
+    """Registers a model as a reference/baseline for drift detection."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        now = datetime.now(timezone.utc).isoformat()
+        cursor.execute("""
+            INSERT INTO model_registry (model_hash, model_name, reference_latency, reference_memory_mb, reference_throughput, metadata, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(model_hash) DO UPDATE SET
+                model_name = excluded.model_name,
+                reference_latency = excluded.reference_latency,
+                reference_memory_mb = excluded.reference_memory_mb,
+                reference_throughput = excluded.reference_throughput,
+                metadata = excluded.metadata,
+                timestamp = excluded.timestamp
+        """, (model_hash, name, latency, memory, throughput, json.dumps(metadata or {}), now))
+        conn.commit()
+
+def detect_drift(model_hash: str, current_latency: float, current_throughput: float = None) -> dict:
+    """
+    Senior ML Engineer Practice: Detect performance drift against reference baseline.
+    Returns drift percentages and status.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM model_registry WHERE model_hash = ?", (model_hash,))
+        row = cursor.fetchone()
+        if not row:
+            return {"status": "no_reference", "drift_detected": False}
+        
+        ref = dict(row)
+        latency_drift = ((current_latency - ref['reference_latency']) / ref['reference_latency']) * 100
+        
+        throughput_drift = 0.0
+        if current_throughput and ref['reference_throughput'] > 0:
+            throughput_drift = ((current_throughput - ref['reference_throughput']) / ref['reference_throughput']) * 100
+
+        # Thresholds: >10% latency increase or >10% throughput decrease is a warning
+        is_drifting = latency_drift > 10 or (throughput_drift < -10 if current_throughput else False)
+        
+        return {
+            "status": "success",
+            "drift_detected": is_drifting,
+            "latency_drift_pct": round(latency_drift, 2),
+            "throughput_drift_pct": round(throughput_drift, 2),
+            "reference_latency": ref['reference_latency'],
+            "reference_throughput": ref['reference_throughput']
+        }
 
 def create_join_request(machine_id):
     with get_db() as conn:

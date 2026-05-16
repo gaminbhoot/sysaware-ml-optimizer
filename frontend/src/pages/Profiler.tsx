@@ -9,7 +9,7 @@ const StatCard = ({ label, value, icon: Icon, delay = 0 }: { label: string, valu
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] }}
-    className="glass-card p-5 md:p-6 flex flex-col justify-between min-h-[140px] md:h-40 group hover:border-white/20 transition-colors"
+    className="glass-card p-5 md:p-6 flex flex-col justify-between min-h-[140px] md:h-40 group hover:bg-white/[0.04] transition-all"
   >
     <div className="flex items-center gap-3">
       <div className="p-2 rounded-lg bg-white/5 text-white/50 group-hover:text-white transition-colors shrink-0">
@@ -148,11 +148,11 @@ export const Profiler = () => {
 };
 
 const CapabilityItem = ({ label, active }: { label: string, active: boolean }) => (
-  <div className="flex justify-between items-center py-3 border-b border-white/5">
+  <div className="flex justify-between items-center py-3 border-b border-white/5 last:border-0">
     <span className={cn("text-xs font-medium transition-colors", active ? "text-white" : "text-white/20")}>{label}</span>
     <span className={cn(
-      "text-[9px] font-bold px-2 py-0.5 rounded-full border",
-      active ? "text-emerald border-emerald/20 bg-emerald/5" : "text-white/10 border-white/5"
+      "text-[9px] font-bold px-2 py-0.5 rounded-full",
+      active ? "text-emerald bg-emerald/10" : "text-white/10 bg-white/5"
     )}>
       {active ? 'ACTIVE' : 'N/A'}
     </span>

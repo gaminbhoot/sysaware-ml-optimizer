@@ -9,10 +9,10 @@ interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
-  success: "text-emerald bg-emerald/10 border-emerald/20",
-  warning: "text-amber-400 bg-amber-400/10 border-amber-400/20",
-  error: "text-rose-500 bg-rose-500/10 border-rose-500/20",
-  neutral: "text-muted bg-white/5 border-white/10"
+  success: "text-emerald bg-emerald/10",
+  warning: "text-amber-400 bg-amber-400/10",
+  error: "text-rose-500 bg-rose-500/10",
+  neutral: "text-muted bg-white/5"
 };
 
 /**
@@ -23,7 +23,7 @@ export const Badge = React.memo(({ variant = 'neutral', children, className, ...
   return (
     <span 
       className={cn(
-        "px-2 py-0.5 rounded-full text-[10px] font-mono tracking-widest uppercase border",
+        "px-2 py-0.5 rounded-full text-[10px] font-mono tracking-widest uppercase",
         variantStyles[variant],
         className
       )}

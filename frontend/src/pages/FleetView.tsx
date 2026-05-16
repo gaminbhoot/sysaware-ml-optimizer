@@ -7,6 +7,7 @@ import { FleetChart } from '../components/FleetChart';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { DataValue } from '../components/ui/DataValue';
+import { ConfirmationModal } from '../components/ui/ConfirmationModal';
 
 interface NodeData {
   machine_id: string;
@@ -36,6 +37,15 @@ interface TelemetryData {
   timestamp: string;
 }
 
+interface ConfirmConfig {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  onConfirm: () => void;
+  confirmLabel?: string;
+  variant?: 'danger' | 'warning' | 'info';
+}
+
 export const FleetView = () => {
   const { addNotification } = useNotification();
   const [activeNodes, setActiveNodes] = useState<NodeData[]>([]);
@@ -46,6 +56,13 @@ export const FleetView = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showClearDropdown, setShowClearDropdown] = useState(false);
+  
+  const [confirmConfig, setConfirmConfig] = useState<ConfirmConfig>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
   const fetchData = useCallback(async () => {
     setIsRefreshing(true);
@@ -165,50 +182,64 @@ export const FleetView = () => {
   }, [fetchData]);
 
   const handleDeleteNode = useCallback(async (id: string) => {
-    if (!confirm(`Are you sure you want to remove node ${id} and all its benchmark history?`)) return;
-    
-    try {
-      const res = await fetch(`/api/fleet/node/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        addNotification({
-          type: 'success',
-          message: `Node ${id} removed successfully.`
-        });
-        fetchData();
-      } else {
-        throw new Error('Delete failed');
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Remove Node',
+      message: `Are you sure you want to remove node ${id} and all its benchmark history? This action cannot be undone.`,
+      confirmLabel: 'Remove Node',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/fleet/node/${id}`, { method: 'DELETE' });
+          if (res.ok) {
+            addNotification({
+              type: 'success',
+              message: `Node ${id} removed successfully.`
+            });
+            fetchData();
+          } else {
+            throw new Error('Delete failed');
+          }
+        } catch (e) {
+          addNotification({
+            type: 'error',
+            title: 'Delete Failed',
+            message: `Failed to remove node ${id}.`
+          });
+        }
       }
-    } catch (e) {
-      addNotification({
-        type: 'error',
-        title: 'Delete Failed',
-        message: `Failed to remove node ${id}.`
-      });
-    }
+    });
   }, [addNotification, fetchData]);
 
   const handleClearHistory = useCallback(async (range: string) => {
-    if (!confirm(`Are you sure you want to clear history for: ${range}?`)) return;
-    
-    try {
-      const res = await fetch(`/api/telemetry/history?range_type=${range}`, { method: 'DELETE' });
-      if (res.ok) {
-        addNotification({
-          type: 'success',
-          message: `History cleared for range: ${range}`
-        });
-        setShowClearDropdown(false);
-        fetchData();
-      } else {
-        throw new Error('Clear failed');
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Clear History',
+      message: `Are you sure you want to clear historical telemetry for: ${range}? This data will be permanently deleted.`,
+      confirmLabel: 'Clear History',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/telemetry/history?range_type=${range}`, { method: 'DELETE' });
+          if (res.ok) {
+            addNotification({
+              type: 'success',
+              message: `History cleared for range: ${range}`
+            });
+            setShowClearDropdown(false);
+            fetchData();
+          } else {
+            throw new Error('Clear failed');
+          }
+        } catch (e) {
+          addNotification({
+            type: 'error',
+            title: 'Clear Failed',
+            message: `Failed to clear telemetry history.`
+          });
+        }
       }
-    } catch (e) {
-      addNotification({
-        type: 'error',
-        title: 'Clear Failed',
-        message: `Failed to clear telemetry history.`
-      });
-    }
+    });
   }, [addNotification, fetchData]);
 
   const handleJoinResponse = useCallback(async (id: string, approve: boolean) => {
@@ -248,9 +279,9 @@ export const FleetView = () => {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
           >
-            <Card className="max-w-md w-full border-emerald/20 shadow-[0_0_50px_rgba(16,185,129,0.1)]">
+            <Card className="max-w-md w-full border-transparent shadow-[0_0_50px_rgba(16,185,129,0.1)]">
               <div className="flex items-center gap-4 mb-6">
-                <div className="w-12 h-12 rounded-2xl bg-emerald/10 border border-emerald/20 flex items-center justify-center shrink-0">
+                <div className="w-12 h-12 rounded-2xl bg-emerald/10 flex items-center justify-center shrink-0">
                   <Activity className="text-emerald" size={24} />
                 </div>
                 <div>
@@ -292,7 +323,7 @@ export const FleetView = () => {
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 md:gap-6 w-full lg:w-auto">
            {/* Tab Switcher */}
-          <div className="flex p-1 bg-white/[0.03] border border-border rounded-xl overflow-x-auto no-scrollbar scroll-smooth">
+          <div className="flex p-1 bg-white/[0.03] rounded-xl overflow-x-auto no-scrollbar scroll-smooth">
             <TabButton active={activeTab === 'live'} onClick={() => setActiveTab('live')} icon={Activity} label="Live" count={activeNodes.length} />
             <TabButton active={activeTab === 'charts'} onClick={() => setActiveTab('charts')} icon={BarChart2} label="Charts" />
             <TabButton active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={History} label="History" count={history.length} />
@@ -302,7 +333,8 @@ export const FleetView = () => {
 
           <button 
             onClick={fetchData}
-            className={cn("flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-white/[0.03] border border-border text-silver/40 hover:text-silver transition-all", isRefreshing && "text-emerald")}
+            aria-label="Refresh telemetry data"
+            className={cn("flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-white/[0.03] text-silver/40 hover:text-silver transition-all", isRefreshing && "text-emerald")}
           >
             <RefreshCcw size={18} className={cn(isRefreshing && "animate-spin")} />
             <span className="text-xs font-medium sm:hidden">Refresh Data</span>
@@ -322,7 +354,7 @@ export const FleetView = () => {
       <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex gap-4 w-full sm:w-auto items-center">
            {/* Filter Bar */}
-           <div className="flex items-center gap-2 px-4 py-2 bg-white/[0.03] border border-border rounded-lg text-muted text-sm flex-1 sm:flex-none">
+           <div className="flex items-center gap-2 px-4 py-2 bg-white/[0.03] rounded-lg text-muted text-sm flex-1 sm:flex-none">
              <Filter size={14} />
              <span className="inline">Filter by HW</span>
            </div>
@@ -332,7 +364,9 @@ export const FleetView = () => {
              <div className="relative">
                 <button 
                   onClick={() => setShowClearDropdown(!showClearDropdown)}
-                  className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-400 text-sm hover:bg-rose-500/20 transition-all"
+                  aria-label="Clear telemetry history options"
+                  aria-expanded={showClearDropdown}
+                  className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 rounded-lg text-rose-400 text-sm hover:bg-rose-500/20 transition-all"
                 >
                   <Trash2 size={14} />
                   <span>Clear History</span>
@@ -346,6 +380,7 @@ export const FleetView = () => {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 10 }}
                       className="absolute left-0 mt-2 w-48 bg-surface border border-border rounded-xl shadow-2xl z-30 overflow-hidden"
+                      role="menu"
                     >
                       {[
                         { label: 'Today', value: 'today' },
@@ -356,6 +391,8 @@ export const FleetView = () => {
                         <button
                           key={range.value}
                           onClick={() => handleClearHistory(range.value)}
+                          role="menuitem"
+                          aria-label={`Clear history for ${range.label}`}
                           className="w-full text-left px-4 py-3 text-xs font-mono text-silver/60 hover:text-silver hover:bg-white/5 transition-colors border-b border-white/5 last:border-0 flex items-center justify-between group"
                         >
                           {range.label}
@@ -372,12 +409,14 @@ export const FleetView = () => {
         <div className="flex gap-2 p-1 bg-white/[0.03] border border-border rounded-xl self-end sm:self-auto">
           <button 
             onClick={() => setViewMode('grid')}
+            aria-label="Switch to grid view"
             className={cn("p-2 rounded-lg transition-all", viewMode === 'grid' ? "bg-white/10 text-white" : "text-muted hover:text-silver")}
           >
             <LayoutGrid size={18} />
           </button>
           <button 
             onClick={() => setViewMode('list')}
+            aria-label="Switch to list view"
             className={cn("p-2 rounded-lg transition-all", viewMode === 'list' ? "bg-white/10 text-white" : "text-muted hover:text-silver")}
           >
             <List size={18} />
@@ -430,6 +469,16 @@ export const FleetView = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ConfirmationModal 
+        isOpen={confirmConfig.isOpen}
+        onClose={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmConfig.onConfirm}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        confirmLabel={confirmConfig.confirmLabel}
+        variant={confirmConfig.variant}
+      />
     </div>
   );
 };
@@ -445,6 +494,8 @@ interface TabButtonProps {
 const TabButton = memo(({ active, onClick, icon: Icon, label, count }: TabButtonProps) => (
   <button 
     onClick={onClick}
+    aria-label={`${label} tab`}
+    aria-current={active ? 'page' : undefined}
     className={cn(
       "px-4 md:px-6 py-2.5 rounded-lg flex items-center gap-2 md:gap-3 transition-all shrink-0",
       active ? "bg-white/10 text-white shadow-xl" : "text-silver/30 hover:text-silver/60"
@@ -464,20 +515,20 @@ interface StatsCardProps {
 }
 
 const StatsCard = memo(({ label, value, icon: Icon, color = "text-white" }: StatsCardProps) => (
-  <Card className="flex items-center justify-between group p-5 md:p-6">
+  <Card className="flex items-center justify-between group p-5 md:p-6 border-transparent">
     <div>
       <p className="text-luxury-mono mb-1 text-[9px] md:text-[11px] opacity-50 group-hover:opacity-100 transition-opacity">{label}</p>
       <h3 className={cn("text-xl md:text-2xl font-bold tracking-tight", color)}>{value}</h3>
     </div>
-    <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-white/[0.03] border border-border flex items-center justify-center group-hover:bg-white/[0.06] transition-all">
+    <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-white/[0.03] flex items-center justify-center group-hover:bg-white/[0.06] transition-all">
       <Icon size={18} className="text-silver/40 group-hover:text-silver/80 transition-colors" />
     </div>
   </Card>
 ));
 
 const EmptyState = memo(({ message }: { message: string }) => (
-  <div className="col-span-full py-20 text-center border border-dashed border-border rounded-3xl p-8 bg-white/[0.01]">
-    <div className="w-16 h-16 rounded-full bg-white/[0.02] border border-border flex items-center justify-center mx-auto mb-6">
+  <div className="col-span-full py-20 text-center rounded-3xl p-8 bg-white/[0.01]">
+    <div className="w-16 h-16 rounded-full bg-white/[0.02] flex items-center justify-center mx-auto mb-6">
       <Activity size={32} className="text-silver/10" />
     </div>
     <p className="text-muted text-base md:text-lg max-w-md mx-auto leading-relaxed">{message}</p>
@@ -488,7 +539,7 @@ const LiveNodeCard = memo(({ node, onDelete }: { node: NodeData, onDelete: () =>
   const isServer = node.machine_id.includes('local_server');
   
   return (
-    <Card className="group hover:bg-white/[0.04] transition-all relative overflow-hidden p-6 md:p-8">
+    <Card className="group hover:bg-white/[0.04] transition-all relative overflow-hidden p-6 md:p-8 border-transparent">
       <div className="flex justify-between items-start mb-6">
         <div className="min-w-0">
             <div className="flex items-center gap-2 mb-2">
@@ -503,13 +554,14 @@ const LiveNodeCard = memo(({ node, onDelete }: { node: NodeData, onDelete: () =>
         </div>
         <button 
           onClick={onDelete}
-          className="p-2.5 rounded-xl text-silver/20 hover:text-rose-500 hover:bg-rose-500/10 transition-all md:opacity-0 md:group-hover:opacity-100 shrink-0 border border-transparent hover:border-rose-500/20"
+          aria-label={`Remove node ${node.machine_id}`}
+          className="p-2.5 rounded-xl text-silver/20 hover:text-rose-500 hover:bg-rose-500/10 transition-all md:opacity-0 md:group-hover:opacity-100 shrink-0"
         >
           <Trash2 size={16} />
         </button>
       </div>
 
-      <div className="space-y-4 pt-4 border-t border-border">
+      <div className="space-y-4 pt-4 border-t border-white/5">
         <div className="flex justify-between items-center text-xs">
           <span className="text-muted">System Load</span>
           <span className="text-silver/70 font-mono">Nominal</span>
@@ -534,9 +586,9 @@ const LiveNodeCard = memo(({ node, onDelete }: { node: NodeData, onDelete: () =>
 });
 
 const HistoryRow = memo(({ record }: { record: TelemetryData }) => (
-  <Card className="px-6 md:px-8 py-5 md:py-6 flex flex-col lg:flex-row items-start lg:items-center justify-between group hover:bg-white/[0.04] transition-all gap-6 lg:gap-8 border-border">
+  <Card className="px-6 md:px-8 py-5 md:py-6 flex flex-col lg:flex-row items-start lg:items-center justify-between group hover:bg-white/[0.04] transition-all gap-6 lg:gap-8 border-transparent">
     <div className="flex items-center gap-4 md:gap-6 flex-1 w-full min-w-0">
-      <div className="w-12 h-12 rounded-2xl bg-white/[0.03] border border-border flex items-center justify-center shrink-0 group-hover:border-white/20 transition-colors">
+      <div className="w-12 h-12 rounded-2xl bg-white/[0.03] flex items-center justify-center shrink-0 transition-colors">
         <History size={20} className="text-silver/20 group-hover:text-silver/40 transition-colors" />
       </div>
       <div className="min-w-0 flex-1">
@@ -550,7 +602,7 @@ const HistoryRow = memo(({ record }: { record: TelemetryData }) => (
       </div>
     </div>
 
-    <div className="grid grid-cols-2 sm:grid-cols-4 lg:flex lg:items-center justify-items-start lg:justify-end gap-6 sm:gap-12 lg:gap-16 w-full lg:w-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border">
+    <div className="grid grid-cols-2 sm:grid-cols-4 lg:flex lg:items-center justify-items-start lg:justify-end gap-6 sm:gap-12 lg:gap-16 w-full lg:w-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-white/5">
       <div className="min-w-0">
         <p className="text-luxury-mono text-[9px] text-white/20 mb-1.5">Goal</p>
         <p className="text-[10px] md:text-xs text-silver/70 capitalize font-medium">{record.goal}</p>

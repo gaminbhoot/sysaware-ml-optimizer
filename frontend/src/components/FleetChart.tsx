@@ -48,7 +48,7 @@ export const FleetChart = ({ data }: FleetChartProps) => {
           <h3 className="text-2xl text-white font-medium mb-1">Fleet Performance Benchmark</h3>
           <p className="text-sm text-white/40">Real-world decode throughput (Tokens/Sec) across diverse hardware profiles.</p>
         </div>
-        <div className="flex items-center gap-2 px-4 py-2 bg-emerald/10 border border-emerald/20 rounded-xl">
+        <div className="flex items-center gap-2 px-4 py-2 bg-emerald/10 rounded-xl">
           <Zap size={16} className="text-emerald" />
           <span className="text-xs text-emerald font-bold uppercase tracking-wider">Live Metrics</span>
         </div>
@@ -69,8 +69,8 @@ export const FleetChart = ({ data }: FleetChartProps) => {
                 <div className="flex justify-between items-end mb-3">
                   <div className="flex items-center gap-3">
                     <div className={cn(
-                        "w-8 h-8 rounded-lg flex items-center justify-center border",
-                        isWinner ? "bg-emerald/10 border-emerald/20" : "bg-white/5 border-white/10"
+                        "w-8 h-8 rounded-lg flex items-center justify-center",
+                        isWinner ? "bg-emerald/10" : "bg-white/5"
                     )}>
                       <Cpu size={14} className={isWinner ? "text-emerald" : "text-white/40"} />
                     </div>
@@ -88,7 +88,7 @@ export const FleetChart = ({ data }: FleetChartProps) => {
                 </div>
 
                 {/* Track */}
-                <div className="h-4 bg-white/5 rounded-full overflow-hidden border border-white/5 relative">
+                <div className="h-4 bg-white/5 rounded-full overflow-hidden relative">
                   {/* Progress Bar */}
                   <motion.div 
                     initial={{ width: 0 }}
@@ -131,7 +131,7 @@ export const FleetChart = ({ data }: FleetChartProps) => {
       {/* Comparison Insight Footer */}
       {sortedStats.length > 1 && (
           <div className="mt-20 pt-8 border-t border-white/5 flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+              <div className="p-3 rounded-xl bg-white/5">
                   <Activity size={18} className="text-white/40" />
               </div>
               <div>

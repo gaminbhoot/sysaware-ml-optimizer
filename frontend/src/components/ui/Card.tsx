@@ -13,7 +13,7 @@ export const Card = React.memo(({ children, className, ...props }: CardProps) =>
   return (
     <div 
       className={cn(
-        "bg-white/[0.02] backdrop-blur-[24px] border border-white/[0.08] rounded-[1.5rem] p-6",
+        "bg-white/[0.02] backdrop-blur-[24px] border border-white/[0.08] rounded-xl p-6",
         className
       )}
       {...props}

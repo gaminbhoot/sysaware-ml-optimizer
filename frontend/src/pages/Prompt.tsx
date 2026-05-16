@@ -156,7 +156,7 @@ export const Prompts = () => {
                       <h4 className="text-luxury-mono text-[10px] text-white/20 mb-4 tracking-widest uppercase">Pruned Redundancy</h4>
                       <div className="flex flex-wrap gap-2">
                         {promptResult.removed_words.map((word: string, i: number) => (
-                          <span key={i} className="px-3 py-1 bg-red-500/5 text-red-500/50 rounded-full text-[10px] font-mono border border-red-500/10 hover:border-red-500/30 transition-colors">
+                          <span key={i} className="px-3 py-1 bg-red-500/5 text-red-500/50 rounded-full text-[10px] font-mono transition-colors">
                             {word}
                           </span>
                         ))}
@@ -201,7 +201,7 @@ export const Prompts = () => {
                   ))}
                 </div>
 
-                <div className="p-4 bg-emerald/5 rounded-xl border border-emerald/10 mt-4">
+                <div className="p-4 bg-emerald/5 rounded-xl mt-4">
                   <p className="text-[10px] font-mono text-emerald/60 leading-relaxed">
                     <span className="text-emerald font-bold mr-1">TIP:</span> Use 'Coding' intent for technical specs to preserve variable naming and structural indentation.
                   </p>

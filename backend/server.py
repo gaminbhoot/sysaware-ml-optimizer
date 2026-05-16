@@ -111,6 +111,19 @@ class TelemetryReport(BaseModel):
     decode_tokens_per_sec: float | None = None
     prefill_latency_ms: float | None = None
 
+class ModelRegisterRequest(BaseModel):
+    model_hash: str
+    model_name: str
+    reference_latency: float
+    reference_memory_mb: float
+    reference_throughput: float = 0.0
+    metadata: dict = None
+
+class DriftRequest(BaseModel):
+    model_hash: str
+    current_latency: float
+    current_throughput: float | None = None
+
 class LMStudioSyncRequest(BaseModel):
     host: str = "127.0.0.1"
     port: int = 1234
@@ -166,6 +179,37 @@ async def get_telemetry_history(limit: int = 50, offset: int = 0):
     try:
         history = await anyio.to_thread.run_sync(store.get_recent_telemetry, limit, offset)
         return {"status": "success", "history": history}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/model/registry")
+async def register_model(req: ModelRegisterRequest):
+    """Registers a model baseline for drift monitoring."""
+    try:
+        await anyio.to_thread.run_sync(
+            store.register_reference_model,
+            req.model_hash,
+            req.model_name,
+            req.reference_latency,
+            req.reference_memory_mb,
+            req.reference_throughput,
+            req.metadata
+        )
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/model/drift")
+async def check_drift(req: DriftRequest):
+    """Checks for performance drift against the registered baseline."""
+    try:
+        result = await anyio.to_thread.run_sync(
+            store.detect_drift,
+            req.model_hash,
+            req.current_latency,
+            req.current_throughput
+        )
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

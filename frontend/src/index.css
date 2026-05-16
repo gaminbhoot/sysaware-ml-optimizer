@@ -15,20 +15,65 @@
   --color-bg-surface: #111111;
   --color-bg-glass: rgba(255, 255, 255, 0.02);
   
-  --color-border-subtle: rgba(255, 255, 255, 0.08);
-  --color-border-strong: rgba(255, 255, 255, 0.15);
+  --color-border-subtle: rgba(255, 255, 255, 0.04);
+  --color-border-strong: rgba(255, 255, 255, 0.08);
   
   --color-text-primary: #FFFFFF;
   --color-text-secondary: #E0E0E0; /* Silver */
   --color-text-muted: #9CA3AF;
   
   --color-accent-emerald: #10B981;
+  --color-accent-rose: #F43F5E;
 
   /* Typography */
   --font-family-display: "Nistha", serif;
   --font-family-serif: "Merriweather", serif;
   --font-family-sans: "Quicksand", sans-serif;
   --font-family-mono: "JetBrains Mono", monospace;
+
+  /* Typography Scale (1.25x Major Third) */
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.875rem;   /* 14px */
+  --text-base: 1rem;     /* 16px */
+  --text-lg: 1.25rem;    /* 20px */
+  --text-xl: 1.563rem;   /* 25px */
+  --text-2xl: 1.953rem;  /* 31px */
+  --text-3xl: 2.441rem;  /* 39px */
+  --text-4xl: 3.052rem;  /* 49px */
+
+  /* Border Radius */
+  --radius-sm: 0.5rem;   /* 8px */
+  --radius-md: 0.75rem;  /* 12px */
+  --radius-lg: 1rem;     /* 16px */
+  --radius-xl: 1.5rem;   /* 24px */
+  --radius-2xl: 2rem;    /* 32px */
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+
+  /* Animation */
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 300ms;
+  --duration-slow: 500ms;
+
+  /* Z-Index */
+  --z-hide: -1;
+  --z-base: 0;
+  --z-dropdown: 10;
+  --z-sticky: 20;
+  --z-fixed: 30;
+  --z-modal: 100;
+  --z-popover: 110;
+  --z-tooltip: 120;
+  --z-notification: 130;
 
   /* Spacing (8pt Grid) */
   --space-1: 0.25rem; /* 4px */
