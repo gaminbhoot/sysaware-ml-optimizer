@@ -1,13 +1,119 @@
-from rich.console import Console
-from rich.layout import Layout
-from rich.panel import Panel
-from rich.live import Live
-from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
-from rich.table import Table
-from rich.text import Text
-from rich import box
 from datetime import datetime
 import platform
+
+try:
+    from rich.console import Console
+    from rich.layout import Layout
+    from rich.panel import Panel
+    from rich.live import Live
+    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
+    from rich.table import Table
+    from rich.text import Text
+    from rich import box
+    RICH_AVAILABLE = True
+except ImportError:
+    RICH_AVAILABLE = False
+
+    class _SimpleBox:
+        HORIZONTALS = None
+        DOUBLE_EDGE = None
+        ROUNDED = None
+
+        def __getattr__(self, name):
+            return None
+
+    box = _SimpleBox()
+
+    class Console:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def print(self, *args, **kwargs):
+            print(*args, **kwargs)
+
+    class Layout:
+        def __init__(self, *args, **kwargs):
+            self._children = {}
+            self.content = None
+
+        def split(self, *args, **kwargs):
+            return None
+
+        def split_row(self, *args, **kwargs):
+            return None
+
+        def split_column(self, *args, **kwargs):
+            return None
+
+        def __getitem__(self, key):
+            return self
+
+        def update(self, content):
+            self.content = content
+
+    class Panel:
+        def __init__(self, renderable, *args, **kwargs):
+            self.renderable = renderable
+
+        def __str__(self):
+            return str(self.renderable)
+
+    class Live:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class Progress:
+        def __init__(self, *args, **kwargs):
+            self._tasks = {}
+
+        def add_task(self, description, total=100):
+            task_id = len(self._tasks) + 1
+            self._tasks[task_id] = {"description": description, "total": total, "completed": 0}
+            return task_id
+
+        def update(self, task_id, **kwargs):
+            self._tasks.setdefault(task_id, {}).update(kwargs)
+
+    class SpinnerColumn:
+        pass
+
+    class BarColumn:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class TextColumn:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class TimeElapsedColumn:
+        pass
+
+    class Table:
+        def __init__(self, *args, **kwargs):
+            self.rows = []
+
+        @classmethod
+        def grid(cls, *args, **kwargs):
+            return cls()
+
+        def add_column(self, *args, **kwargs):
+            return None
+
+        def add_row(self, *args, **kwargs):
+            self.rows.append(tuple(str(item) for item in args))
+
+        def __str__(self):
+            return "\n".join(" | ".join(row) for row in self.rows)
+
+    class Text(str):
+        def __new__(cls, value="", *args, **kwargs):
+            return str.__new__(cls, value)
 
 console = Console()
 
@@ -82,6 +188,12 @@ class SysAwareTUI:
             self.progress.update(self.tasks[name], description=f"[bold red]✗ {name} Failed[/]")
 
 def render_final_table(report: dict):
+    if not RICH_AVAILABLE:
+        print()
+        print("Final Optimization Report")
+        print(f"Recommendation: {report['strategy']['recommendation']}")
+        return
+
     system = report["system_profile"]
     best_result = report["best_result"]
     best_config = report["best_config"]
