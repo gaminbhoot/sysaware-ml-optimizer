@@ -60,6 +60,58 @@ class LMStudioClient:
         
         return None
 
+    def chat_stream(self, messages: list[dict[str, str]], model_id: Optional[str] = None):
+        """Streams chat completions from LM Studio (OpenAI compatible)."""
+        
+        # Auto-detect model if not provided
+        if not model_id:
+            analysis = self.sync_loaded_model()
+            if analysis:
+                model_id = analysis.get('model_name')
+        
+        url = f"{self.base_url}/v1/chat/completions"
+        payload = {
+            "model": model_id or "default",
+            "messages": messages,
+            "stream": True,
+            "temperature": 0.7
+        }
+        
+        try:
+            print(f"LM Studio Client: Starting chat stream for model '{payload['model']}'...")
+            # Increase timeout to 30s for the first byte (LLM loading/warming up)
+            response = requests.post(url, json=payload, stream=True, timeout=(30, 60))
+            
+            if response.status_code != 200:
+                error_detail = response.text[:100]
+                print(f"LM Studio Client: Error {response.status_code} - {error_detail}")
+                yield {"error": f"LM Studio error {response.status_code}: {error_detail}"}
+                return
+
+            for line in response.iter_lines():
+                if line:
+                    decoded = line.decode('utf-8')
+                    if decoded.startswith("data: "):
+                        data_str = decoded[6:].strip()
+                        if data_str == "[DONE]":
+                            print("LM Studio Client: Stream complete.")
+                            break
+                        try:
+                            data = json.loads(data_str)
+                            if 'choices' in data and len(data['choices']) > 0:
+                                content = data['choices'][0]['delta'].get('content', '')
+                                if content:
+                                    yield {"content": content}
+                        except Exception as e:
+                            print(f"LM Studio Client: JSON Parse Error: {e} for string: {data_str}")
+                            continue
+        except requests.exceptions.Timeout:
+            print("LM Studio Client: Request timed out.")
+            yield {"error": "LM Studio connection timed out. Ensure the model is loaded and ready."}
+        except Exception as e:
+            print(f"LM Studio Client: Exception: {e}")
+            yield {"error": str(e)}
+
     def _map_to_analysis(self, lm_model: Dict[str, Any]) -> Dict[str, Any]:
         """Maps LM Studio model metadata to SysAware ModelAnalysis structure."""
         name = lm_model.get('display_name', lm_model.get('id', lm_model.get('key', 'Unknown')))

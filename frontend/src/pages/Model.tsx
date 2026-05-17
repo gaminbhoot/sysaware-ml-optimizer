@@ -435,7 +435,7 @@ export const ModelAnalysis = () => {
                       <div className="flex flex-col gap-8">
                         <div className="flex items-start justify-between gap-4">
                           <div>
-                            <h3 className="text-2xl font-light mb-2">Path A: Custom Model Diagnostic</h3>
+                            <h3 className="text-2xl font-light mb-2">Model Diagnostic</h3>
                             <p className="text-sm text-white/30">Deep scan for dtype inefficiencies, dead layers, and quantization headroom.</p>
                           </div>
                           <button
@@ -500,7 +500,7 @@ export const ModelAnalysis = () => {
                       <div className="flex flex-col gap-10">
                         <div className="flex items-start justify-between gap-4">
                           <div>
-                            <h3 className="text-2xl font-light mb-2">Path B: Runtime Parameter Tuner</h3>
+                            <h3 className="text-2xl font-light mb-2">Parameter Tuner</h3>
                             <p className="text-sm text-white/30">Auto-benchmarking for VRAM split, max context, and concurrency ceilings.</p>
                           </div>
                           <button
@@ -608,18 +608,6 @@ export const ModelAnalysis = () => {
                         <span className="text-white/60 uppercase">{useStore().goal}</span>
                     </div>
                 </div>
-
-                {/* Inline Action for Phase 5 Prep */}
-                {modelAnalysis && (
-                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pt-6">
-                      <button 
-                        disabled
-                        className="w-full flex items-center justify-center gap-3 py-4 rounded-xl bg-white/5 border border-white/10 text-white/20 font-mono text-[9px] uppercase tracking-widest cursor-not-allowed"
-                      >
-                        Chat Integration (Phase 5)
-                      </button>
-                   </motion.div>
-                )}
               </div>
             </div>
             

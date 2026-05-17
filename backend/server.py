@@ -160,6 +160,8 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     model_id: str | None = None
+    host: str = "127.0.0.1"
+    port: int = 1234
     stream: bool = True
 
 # --- Background Tasks ---
@@ -498,11 +500,16 @@ async def diagnose_custom_stream(req: DiagnosticRequest):
         async def event_generator():
             gen = diag.diagnostic_generator(model_obj)
             while True:
+                def safe_next():
+                    try:
+                        return next(gen)
+                    except StopIteration:
+                        return None
                 try:
-                    update = await anyio.to_thread.run_sync(next, gen)
+                    update = await anyio.to_thread.run_sync(safe_next)
+                    if update is None:
+                        break
                     yield f"data: {json.dumps(update)}\n\n"
-                except StopIteration:
-                    break
                 except Exception as e:
                     yield f"data: {json.dumps({'status': 'error', 'detail': str(e)})}\n\n"
                     break
@@ -518,11 +525,16 @@ async def tune_runtime_stream(req: RuntimeTuneRequest):
         async def event_generator():
             gen = tuner.runtime_tune_generator(req.model_id, req.source, req.system_profile)
             while True:
+                def safe_next():
+                    try:
+                        return next(gen)
+                    except StopIteration:
+                        return None
                 try:
-                    update = await anyio.to_thread.run_sync(next, gen)
+                    update = await anyio.to_thread.run_sync(safe_next)
+                    if update is None:
+                        break
                     yield f"data: {json.dumps(update)}\n\n"
-                except StopIteration:
-                    break
                 except Exception as e:
                     yield f"data: {json.dumps({'status': 'error', 'detail': str(e)})}\n\n"
                     break
@@ -543,23 +555,38 @@ async def estimate_inference(req: InferenceEstimateRequest):
 async def chat_stream(req: ChatRequest):
     """
     Unified chat proxy for Ollama, LM Studio, and OLX.
-    Currently simulates a response for the Evolution Plan phase.
+    Uses the provided host and port to connect to the active backend.
     """
     try:
+        client = lms.LMStudioClient(host=req.host, port=req.port)
+        messages = [{"role": m.role, "content": msg_content_filter(m.content)} for m in req.messages]
+        
         async def event_generator():
-            # Simulated streaming response
-            full_response = f"I am currently optimized for your hardware. Based on your prompt, I recommend focusing on {req.messages[-1].content[:20]}..."
-            words = full_response.split()
-            
-            for word in words:
-                yield f"data: {json.dumps({'content': word + ' '})}\n\n"
-                await asyncio.sleep(0.05)
+            gen = client.chat_stream(messages, req.model_id)
+            while True:
+                def safe_next():
+                    try:
+                        return next(gen)
+                    except StopIteration:
+                        return None
+                try:
+                    update = await anyio.to_thread.run_sync(safe_next)
+                    if update is None:
+                        break
+                    yield f"data: {json.dumps(update)}\n\n"
+                except Exception as e:
+                    yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                    break
             
             yield f"data: {json.dumps({'status': 'done'})}\n\n"
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+def msg_content_filter(content: str) -> str:
+    """Optional: strip frontend-only markers if any."""
+    return content.strip()
 
 # --- Serve React Frontend ---
 if os.path.exists("frontend/dist"):

@@ -155,6 +155,33 @@
     font-weight: 400;
     color: white;
   }
+
+  .markdown-content h1, 
+  .markdown-content h2, 
+  .markdown-content h3 {
+    @apply text-xl font-bold my-4 italic;
+  }
+  
+  .markdown-content p {
+    @apply mb-4 last:mb-0;
+  }
+  
+  .markdown-content ul, 
+  .markdown-content ol {
+    @apply pl-6 mb-4 list-disc;
+  }
+  
+  .markdown-content code {
+    @apply font-mono bg-black/10 px-1.5 py-0.5 rounded text-sm;
+  }
+  
+  .markdown-content pre {
+    @apply bg-black/5 p-4 rounded-2xl my-4 overflow-x-auto border border-black/5;
+  }
+  
+  .markdown-content pre code {
+    @apply bg-transparent p-0;
+  }
 }
 
 /* Custom Scrollbar */
