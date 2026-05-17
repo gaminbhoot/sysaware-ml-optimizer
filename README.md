@@ -1,20 +1,36 @@
 # SysAware ML Optimizer
 
-> A distributed, hardware-aware toolset designed to dynamically profile, compress, and accelerate PyTorch models based on physical hardware capabilities across CPU, GPU, Apple Silicon (MPS), and NPUs.
+> A distributed, hardware-aware ecosystem designed to dynamically profile, diagnose, and accelerate LLMs based on physical hardware capabilities across CPU, GPU, Apple Silicon (MPS), and NPUs.
 
-SysAware ML Optimizer acts as a real-time telemetry and benchmarking suite. By automatically adjusting to your system capabilities, evaluating token-generation metrics, and syncing via Server-Sent Events (SSE) to a modern dashboard, it elevates static model optimization into a fully observable network orchestration.
+SysAware ML Optimizer has evolved from a single-machine profiling engine into a **comprehensive, dual-path diagnostic and runtime tuning suite**. By bridging the gap between raw weights and runtime backends, it provides actionable architectural insights and precise performance estimations for both custom and pre-built models.
 
 ---
 
-## ✨ Features
+## ⚡ The Dual-Path Architecture
 
-- **Distributed Telemetry & Autodiscovery:** Worker nodes automatically discover and connect to a central server via UDP broadcast to stream telemetry across the LAN.
-- **Hardware-Aware Autotuning:** Algorithms dynamically match model requirements with system compute, seamlessly transitioning between CPU, GPU, and Apple Silicon.
-- **Real-Time React Dashboard:** A fast Vite+React frontend visualizes live Server-Sent Events (SSE) directly from worker nodes.
-- **Live Inference Benchmarking:** Measures Time-To-First-Token, Decode Speed, and memory performance under real datasets.
-- **Strict Security Boundaries:** Forces `torch.load(weights_only=True)` by default to prevent arbitrary code execution during serialization.
-- **FastAPI backend & SQLite:** High-performance, lightweight telemetry ingestion backed by persistent local storage.
-- **Interactive TUI:** Beautiful terminal interface (Rich) for dynamic, local optimization tracking.
+SysAware now orchestrates two distinct optimization journeys:
+
+### 🛠️ Path A: Model Diagnostic (Custom Models)
+Designed for researchers and fine-tuners working with raw checkpoints (`.pt`, `.safetensors`).
+*   **Deep Architectural Scan**: Identifies `dtype` inefficiencies (FP32 where FP16 suffices) and disproportional parameter distribution.
+*   **Health Mapping**: Detects "dead neurons" from near-zero activations and calculates weight-redundancy across layers.
+*   **Quantization Headroom**: Predicts the maximum quantization threshold (e.g., 4-bit vs 8-bit) before significant accuracy degradation.
+
+### ⚙️ Path B: Parameter Tuner (Pre-built Models)
+Designed for users running models via runtime backends like **LM Studio**, **Ollama**, or **OLX**.
+*   **VRAM Split Optimization**: Calculates the mathematically optimal GPU/CPU layer split based on available VRAM headroom.
+*   **Context Bound Discovery**: Empirically derives the exact maximum context length your hardware can sustain without spilling to RAM.
+*   **Concurrency Benchmarking**: Identifies the "throughput ceiling" by stress-testing the model under multiple parallel requests.
+
+---
+
+## ✨ Key Features
+
+- **🧠 Inference Estimator**: Predict tokens-per-second (tok/s) before loading a model. Powered by a **RandomForest Regressor** trained on community benchmarks and lab-measured ground truth, specifically optimized for Apple Silicon and RAM-spill conditions.
+- **💬 Prompt Engine Laboratory**: A dual-purpose workspace to restructure prompts for token-efficiency in the **Prompt Lab**, and immediately test them in a **Live Chat** interface connected to your backend LLM.
+- **🛰️ Distributed Telemetry**: Unified **Fleet Dashboard** to monitor multiple inference nodes across a LAN using UDP autodiscovery and SSE (Server-Sent Events).
+- **🎨 Cinematic Model Hub**: A premium, stateful UI for model orchestration, featuring live progress tracking for long-running diagnostic and tuning sessions.
+- **🛡️ Secure Ingest**: Enforces strict security boundaries with verified safetensors support and optional unsafe-load flags for legacy checkpoints.
 
 ---
 
@@ -23,55 +39,43 @@ SysAware ML Optimizer acts as a real-time telemetry and benchmarking suite. By a
 ```text
 sysaware-ml-optimizer/
 ├── backend/                # FastAPI server and core logic
-│   ├── core/               # Optimization and profiling modules
-│   ├── server.py           # Central telemetry hub
+│   ├── core/               # Diagnostic, Tuning, and ML modules
+│   │   ├── diagnostic.py   # Path A logic
+│   │   ├── tuner.py        # Path B logic
+│   │   ├── estimator.py    # tok/s prediction engine
+│   │   └── lmstudio.py     # Live bridge/proxy
+│   ├── server.py           # Central API & Telemetry hub
 │   └── main.py             # CLI worker entry point
-├── frontend/               # Vite + React dashboard
-├── gui/                    # Streamlit interface
-├── scripts/                # Utility scripts (dummy model generation)
-├── data/                   # Persistence (SQLite, Caches)
-├── logs/                   # Application logs
-├── artifacts/              # Model weights and temporary files
-├── docs/                   # Documentation and roadmaps
-├── references/             # External reference material
-└── tests/                  # Pytest suite
+├── frontend/               # Vite + React (TypeScript) dashboard
+├── data/                   # ML models, benchmark CSVs, and SQLite DB
+├── scripts/                # Data augmentation and training pipelines
+├── docs/                   # Architectural plans and evolution roadmap
+├── tests/                  # Comprehensive Pytest & Playwright E2E suite
+└── venv/                   # Local Python environment
 ```
 
 ---
 
-## 🚀 Quickstart (Docker)
+## 🚀 Quickstart
 
-The fastest way to get started is by spinning up the backend and frontend simultaneously via Docker Compose:
+Ensure you have **Python 3.14+** and **Node.js 18+** installed.
 
-```bash
-git clone https://github.com/gaminbhoot/sysaware-ml-optimizer.git
-cd sysaware-ml-optimizer
-docker-compose up --build
-```
-- **React Frontend:** `http://localhost:5173`
-- **FastAPI Backend:** `http://localhost:8000`
-
----
-
-## 🛠️ Local Installation & Usage
-
-Ensure you have **Python 3.9+** and **Node.js 18+** installed. 
-
-### 1. Set up the Core & Telemetry Server 
-The telemetry server ingests logs, streams updates, and manages SQLite persistence.
+### 1. Initialize the Backend
+The server handles diagnostics, proxied chat, and telemetry.
 
 ```bash
+# From the root directory
 python3 -m venv venv
-source venv/bin/activate       # Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
 
-# Start the Telemetry Hub (Rest API & UDP Autodiscovery)
-cd backend
-python server.py
+# Start the Hub (Default: http://localhost:8000)
+export PYTHONPATH=$PYTHONPATH:.
+python backend/server.py
 ```
 
-### 2. Set up the React Dashboard
-Monitor the optimization streams via the real-time UI. In a new terminal:
+### 2. Launch the Model Hub
+Monitor and tune your models via the cinematic dashboard.
 
 ```bash
 cd frontend
@@ -79,30 +83,23 @@ npm install
 npm run dev
 ```
 
-### 3. Run a SysAware Worker Node
-Optimize a model locally. The node will automatically discover the telemetry server.
+### 3. Training the Estimator (Optional)
+To update the inference predictor with the latest benchmarks:
 
 ```bash
-source venv/bin/activate
-
-# Optional: Generate some dummy models for testing
-python scripts/generate_more_dummy_models.py
-
-# Run the TUI optimization workflow
-python backend/main.py --model-path artifacts/dummy_models/slightly_unoptimized_model.pt --goal compress
+# Scrape latest data and train the RandomForest models
+python scripts/augment_benchmarks_v2.py
+python scripts/train_estimator_v2.py
 ```
 
 ---
 
-## 🧪 Testing
+## 🧪 Testing & Validation
 
-SysAware enforces high code quality through a comprehensive test suite. 
+SysAware enforces high code quality through a dual-layered test suite:
 
-```bash
-# From the project root
-export PYTHONPATH=$PYTHONPATH:$(pwd)/backend
-pytest -v
-```
+*   **Backend (Pytest)**: `pytest tests/test_dual_path_api.py`
+*   **Frontend (Playwright)**: `npx playwright test`
 
 ## 📜 License
 Distributed under the MIT License.
