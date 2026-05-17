@@ -69,3 +69,7 @@ generate_more_dummy_models.py
 
 # Dummy models directory for local testing
 dummy_models/
+
+# E2E Test Results
+frontend/playwright-report/
+frontend/test-results/
