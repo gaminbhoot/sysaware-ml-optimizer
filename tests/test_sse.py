@@ -1,8 +1,27 @@
 import requests
 import json
 import time
-
 import os
+import torch
+import torch.nn as nn
+from pathlib import Path
+import pytest
+
+@pytest.fixture(autouse=True)
+def setup_dummy_model():
+    orig_dir = Path.cwd()
+    artifacts_dir = orig_dir / "artifacts"
+    artifacts_dir.mkdir(exist_ok=True)
+    model_path = artifacts_dir / "temp_model.pt"
+    
+    if not model_path.exists():
+        class DummyModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.fc = nn.Linear(10, 10)
+        torch.save(DummyModel(), model_path)
+    
+    yield
 
 def test_autotune_stream():
     port = os.getenv("PORT", "8000")

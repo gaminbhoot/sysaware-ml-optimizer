@@ -2,8 +2,28 @@ import pytest
 from fastapi.testclient import TestClient
 from backend.server import app
 import json
+import torch
+import torch.nn as nn
+from pathlib import Path
 
 client = TestClient(app)
+
+@pytest.fixture(autouse=True)
+def setup_dummy_model(tmp_path):
+    orig_dir = Path.cwd()
+    artifacts_dir = orig_dir / "artifacts"
+    artifacts_dir.mkdir(exist_ok=True)
+    model_path = artifacts_dir / "temp_model.pt"
+    
+    if not model_path.exists():
+        class DummyModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.fc = nn.Linear(10, 10)
+        torch.save(DummyModel(), model_path)
+    
+    yield
+    # We could optionally clean up, but keeping it is fine.
 
 def test_diagnose_custom_stream_content():
     """AC-A3, AC-A4: Test that the diagnostic stream yields data chunks."""
