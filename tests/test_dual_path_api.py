@@ -8,6 +8,11 @@ from pathlib import Path
 
 client = TestClient(app)
 
+class DummyModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc = nn.Linear(10, 10)
+
 @pytest.fixture(autouse=True)
 def setup_dummy_model(tmp_path):
     orig_dir = Path.cwd()
@@ -16,10 +21,6 @@ def setup_dummy_model(tmp_path):
     model_path = artifacts_dir / "temp_model.pt"
     
     if not model_path.exists():
-        class DummyModel(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.fc = nn.Linear(10, 10)
         torch.save(DummyModel(), model_path)
     
     yield
