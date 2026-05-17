@@ -23,8 +23,11 @@ import core.autotuner as at
 import core.store as store
 import core.autodiscovery as discovery
 import core.lmstudio as lms
+import core.diagnostic as diag
+import core.tuner as tuner
 from main import load_model_from_path
 
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 # --- Lifecycle ---
@@ -39,6 +42,15 @@ async def lifespan(app: FastAPI):
     # Cleanup if needed
 
 app = FastAPI(title="SysAware ML Optimizer API", lifespan=lifespan)
+
+# CORS: Allow local development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize DB
 store.init_db()
@@ -127,6 +139,28 @@ class DriftRequest(BaseModel):
 class LMStudioSyncRequest(BaseModel):
     host: str = "127.0.0.1"
     port: int = 1234
+
+class DiagnosticRequest(BaseModel):
+    model_path: str
+    unsafe_load: bool = False
+
+class RuntimeTuneRequest(BaseModel):
+    model_id: str
+    source: str  # lms, ollama, olx
+    system_profile: dict
+
+class InferenceEstimateRequest(BaseModel):
+    hardware_specs: dict
+    model_metadata: dict
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+    model_id: str | None = None
+    stream: bool = True
 
 # --- Background Tasks ---
 async def server_heartbeat_task():
@@ -223,13 +257,18 @@ async def clear_telemetry(range_type: str = "all"):
 
 @app.post("/api/lmstudio/sync")
 async def sync_lmstudio(req: LMStudioSyncRequest):
+    print(f"Sync attempt with LM Studio at {req.host}:{req.port}")
     try:
         client = lms.LMStudioClient(host=req.host, port=req.port)
         analysis = await anyio.to_thread.run_sync(client.sync_loaded_model)
         if not analysis:
-            raise HTTPException(status_code=404, detail="No loaded model found in LM Studio or connection failed")
+            print(f"Sync failed: No model found or connection error at {req.host}:{req.port}")
+            raise HTTPException(status_code=404, detail=f"No loaded model found in LM Studio or connection failed at {req.host}:{req.port}. Ensure 'Local Server' is ON in LM Studio.")
+        print(f"Sync success: Found model {analysis['model_name']}")
         return {"status": "success", "analysis": analysis}
     except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        print(f"Sync error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/fleet/active")
@@ -452,6 +491,76 @@ async def autotune_stream_endpoint(req: AutotuneRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/diagnose/custom/stream")
+async def diagnose_custom_stream(req: DiagnosticRequest):
+    try:
+        model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
+        async def event_generator():
+            gen = diag.diagnostic_generator(model_obj)
+            while True:
+                try:
+                    update = await anyio.to_thread.run_sync(next, gen)
+                    yield f"data: {json.dumps(update)}\n\n"
+                except StopIteration:
+                    break
+                except Exception as e:
+                    yield f"data: {json.dumps({'status': 'error', 'detail': str(e)})}\n\n"
+                    break
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    except Exception as e:
+        # If model loading fails, we still want to yield an error in the stream if possible, 
+        # but here we just throw 500 for simplicity as per current pattern.
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/tune/runtime/stream")
+async def tune_runtime_stream(req: RuntimeTuneRequest):
+    try:
+        async def event_generator():
+            gen = tuner.runtime_tune_generator(req.model_id, req.source, req.system_profile)
+            while True:
+                try:
+                    update = await anyio.to_thread.run_sync(next, gen)
+                    yield f"data: {json.dumps(update)}\n\n"
+                except StopIteration:
+                    break
+                except Exception as e:
+                    yield f"data: {json.dumps({'status': 'error', 'detail': str(e)})}\n\n"
+                    break
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/estimate/inference")
+async def estimate_inference(req: InferenceEstimateRequest):
+    try:
+        result = await anyio.to_thread.run_sync(est.predict_inference_speed, req.hardware_specs, req.model_metadata)
+        result["status"] = "success"
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/chat/stream")
+async def chat_stream(req: ChatRequest):
+    """
+    Unified chat proxy for Ollama, LM Studio, and OLX.
+    Currently simulates a response for the Evolution Plan phase.
+    """
+    try:
+        async def event_generator():
+            # Simulated streaming response
+            full_response = f"I am currently optimized for your hardware. Based on your prompt, I recommend focusing on {req.messages[-1].content[:20]}..."
+            words = full_response.split()
+            
+            for word in words:
+                yield f"data: {json.dumps({'content': word + ' '})}\n\n"
+                await asyncio.sleep(0.05)
+            
+            yield f"data: {json.dumps({'status': 'done'})}\n\n"
+
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # --- Serve React Frontend ---
 if os.path.exists("frontend/dist"):
     app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
@@ -464,4 +573,20 @@ else:
         }
 
 if __name__ == "__main__":
+    import socket
+    try:
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+    except:
+        local_ip = "0.0.0.0"
+    
+    print(f"\n" + "="*50)
+    print(f"SYSAWARE ML OPTIMIZER SERVER ACTIVE")
+    print(f"Local Access:   http://localhost:8000")
+    print(f"Network Access: http://{local_ip}:8000")
+    print(f"UDP Discovery:  Port 8001")
+    print("="*50)
+    print("TIP: For LM Studio sync, ensure 'Local Server' is ON.")
+    print("TIP: If telemetry fails, check firewall for Port 8000 (TCP) and 8001 (UDP).")
+    print("="*50 + "\n")
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

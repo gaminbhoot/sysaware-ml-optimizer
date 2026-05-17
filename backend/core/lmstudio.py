@@ -9,39 +9,55 @@ class LMStudioClient:
         self.host = host
         self.port = port
         self.base_url = f"http://{host}:{port}"
+        self.host_is_local = host in ["127.0.0.1", "localhost"]
 
     def sync_loaded_model(self) -> Optional[Dict[str, Any]]:
         """
         Detects loaded model in LM Studio and converts it to SysAware ModelAnalysis format.
         """
-        try:
-            # Try native API (LM Studio 0.3+)
-            response = requests.get(f"{self.base_url}/api/v1/models", timeout=3)
-            if response.status_code == 200:
-                data = response.json()
-                # Newer versions use 'models' key
-                models = data.get('models', data.get('data', []))
-                
-                for model in models:
-                    # Check if loaded (newer versions use loaded_instances)
-                    is_loaded = model.get('loaded', False)
-                    if not is_loaded:
-                        instances = model.get('loaded_instances', [])
-                        if isinstance(instances, list) and len(instances) > 0:
-                            is_loaded = True
+        urls_to_try = [
+            f"{self.base_url}/api/v1/models",
+            f"{self.base_url}/v1/models"
+        ]
+        
+        # If host is localhost, also try 127.0.0.1 and vice versa on failure
+        if self.host_is_local:
+            alt_host = "127.0.0.1" if self.host == "localhost" else "localhost"
+            urls_to_try.extend([
+                f"http://{alt_host}:{self.port}/api/v1/models",
+                f"http://{alt_host}:{self.port}/v1/models"
+            ])
+
+        for url in urls_to_try:
+            try:
+                print(f"LM Studio Client: Trying {url}...")
+                response = requests.get(url, timeout=5)
+                if response.status_code == 200:
+                    data = response.json()
+                    # Newer versions use 'models' key
+                    models = data.get('models', data.get('data', []))
                     
-                    if is_loaded:
-                        return self._map_to_analysis(model)
-            
-            # Fallback to OpenAI /v1/models (less reliable for 'loaded' status)
-            response = requests.get(f"{self.base_url}/v1/models", timeout=3)
-            if response.status_code == 200:
-                models = response.json().get('data', [])
-                if models:
-                    return self._map_to_analysis(models[0])
-                    
-        except Exception as e:
-            print(f"LM Studio sync error: {e}")
+                    if not models:
+                        print(f"LM Studio Client: No models found at {url}")
+                        continue
+
+                    for model in models:
+                        # Check if loaded (newer versions use loaded_instances)
+                        is_loaded = model.get('loaded', False)
+                        if not is_loaded:
+                            instances = model.get('loaded_instances', [])
+                            if isinstance(instances, list) and len(instances) > 0:
+                                is_loaded = True
+                        
+                        # If we used /v1/models (OpenAI compat), 'loaded' might not be present.
+                        # In that case, we just assume the first one returned might be the active one 
+                        # IF there's only one. Or if it's the only way to get info.
+                        if is_loaded or len(models) == 1:
+                            print(f"LM Studio Client: Success at {url}")
+                            return self._map_to_analysis(model)
+            except Exception as e:
+                print(f"LM Studio Client: Connection failed for {url}: {e}")
+        
         return None
 
     def _map_to_analysis(self, lm_model: Dict[str, Any]) -> Dict[str, Any]:

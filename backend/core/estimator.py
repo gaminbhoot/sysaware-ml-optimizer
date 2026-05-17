@@ -8,30 +8,18 @@ from typing import Any
 from .contracts import PerformanceEstimate
 from .logging_utils import get_logger
 from .benchmark import run_llm_benchmark
-
-try:
-	import torch  # type: ignore
-	from transformers import PreTrainedModel
-except Exception:  # pragma: no cover
-	torch = None  # type: ignore
-	PreTrainedModel = None
-
-logger = get_logger("sysaware.estimator")
-
-
-logger = get_logger("sysaware.estimator")
-
-
 def _dtype_size_bytes(dtype: Any) -> int:
-	if torch is not None and dtype is not None:
-		try:
+	try:
+		import torch
+		if dtype is not None:
 			return int(torch.tensor([], dtype=dtype).element_size())
-		except Exception:
-			pass
+	except Exception:
+		pass
 	return 4
 
 
 def _estimate_static_memory_mb(model: Any) -> float:
+
 	total_params = 0
 	dtype_size = 4
 
@@ -82,7 +70,9 @@ def _get_model_input_shape(model: Any) -> tuple[int, ...]:
 	Heuristically determines the expected input shape for a torch model.
 	Defaults to (1, 16) if detection fails.
 	"""
-	if torch is None:
+	try:
+		import torch
+	except ImportError:
 		return (1, 16)
 
 	try:
@@ -106,7 +96,9 @@ def _get_model_input_shape(model: Any) -> tuple[int, ...]:
 
 
 def _build_dummy_input(model: Any, batch_size: int) -> Any:
-	if torch is None:
+	try:
+		import torch
+	except ImportError:
 		return None
 	
 	shape = list(_get_model_input_shape(model))
@@ -120,7 +112,9 @@ def _build_dummy_input(model: Any, batch_size: int) -> Any:
 
 
 def _run_micro_benchmark(model: Any, profile: dict[str, Any]) -> tuple[tuple[float, float], float, str]:
-	if torch is None:
+	try:
+		import torch
+	except ImportError:
 		raise RuntimeError("Torch is required for micro-benchmarking")
 
 	if not hasattr(model, "eval") or not callable(getattr(model, "eval")):
@@ -230,8 +224,67 @@ def _run_micro_benchmark(model: Any, profile: dict[str, Any]) -> tuple[tuple[flo
 	confidence = "high" if len(durations) >= 5 else "medium"
 	return (latency_low, latency_high), memory_mb, confidence
 
+import joblib
+import os
+import pandas as pd
+
+def predict_inference_speed(hardware_specs: dict, model_metadata: dict) -> dict:
+    """Predicts tok/s using trained regression models."""
+    # Load models and metadata on demand
+    try:
+        estimator_invram = joblib.load("data/estimator_invram.joblib")
+        estimator_metadata = joblib.load("data/estimator_metadata.joblib")
+        # Try to load spill model if it exists
+        estimator_spill = None
+        if os.path.exists("data/estimator_ramspill.joblib"):
+            estimator_spill = joblib.load("data/estimator_ramspill.joblib")
+    except:
+        return {"error": "Estimator model not loaded", "predicted_tok_s": 0.0}
+
+    # Feature engineering
+    mem_bw = hardware_specs.get("memory_bandwidth_gbps", 100.0)
+    vram = hardware_specs.get("vram_gb", 8.0)
+    params = model_metadata.get("params_b", 7.0)
+    bits = model_metadata.get("quant_bits", 4.0)
+    model_size = (params * bits) / 8
+    
+    # Platform detection
+    gpu_name = hardware_specs.get("gpu_name", "").upper()
+    is_apple = 1 if any(x in gpu_name for x in ["M1", "M2", "M3", "M4", "APPLE", "SILICON"]) else 0
+
+    is_spill = 1 if model_size > (vram * 0.8) else 0
+
+    features = ['memory_bandwidth_gbps', 'vram_gb', 'model_size_gb', 'quant_bits', 'is_apple']
+    input_data = pd.DataFrame([[mem_bw, vram, model_size, bits, is_apple]], columns=features)
+
+    if is_spill and estimator_spill:
+        prediction = float(estimator_spill.predict(input_data)[0])
+        mae = estimator_metadata["maes"].get("spill", 5.0)
+        method = "randomforest-ramspill"
+    elif is_spill:
+        # Fallback for spill if no model trained
+        prediction = 2.0
+        mae = 1.0
+        method = "spill-fallback"
+    else:
+        prediction = float(estimator_invram.predict(input_data)[0])
+        mae = estimator_metadata["maes"]["invram"]
+        method = "randomforest-invram"
+
+    return {
+        "predicted_tok_s": prediction,
+        "confidence_interval": [max(0, prediction - mae), prediction + mae],
+        "method": method,
+        "is_apple": bool(is_apple),
+        "is_ram_spill": bool(is_spill)
+    }
 
 def estimate_performance(model: Any, profile: dict[str, Any]) -> PerformanceEstimate:
+	try:
+		from transformers import PreTrainedModel
+	except ImportError:
+		PreTrainedModel = None
+
 	if model is None:
 		raise ValueError("Model cannot be None")
 	if not isinstance(profile, dict):
