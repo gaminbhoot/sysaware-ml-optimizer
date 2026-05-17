@@ -1,14 +1,12 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Cpu, Activity, Layers, Zap, MessageSquare, Target, Server } from 'lucide-react';
+import { Cpu, Activity, Layers, MessageSquare, Server } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion } from 'framer-motion';
 
 const navItems = [
   { path: '/profiler', icon: Activity, label: 'Profiler' },
   { path: '/model', icon: Layers, label: 'Model' },
-  { path: '/optimizer', icon: Zap, label: 'Optimizer' },
   { path: '/prompt', icon: MessageSquare, label: 'Prompts' },
-  { path: '/results', icon: Target, label: 'Results' },
   { path: '/fleet', icon: Server, label: 'Fleet' },
 ];
 

@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { StoreProvider } from './context/StoreContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { NotificationContainer } from './components/Notification';
@@ -9,9 +9,7 @@ import { Layout } from './components/Layout';
 const Home = lazy(() => import('./pages/Home').then(m => ({ default: m.Home })));
 const Profiler = lazy(() => import('./pages/Profiler').then(m => ({ default: m.Profiler })));
 const ModelAnalysis = lazy(() => import('./pages/Model').then(m => ({ default: m.ModelAnalysis })));
-const Optimizer = lazy(() => import('./pages/Optimizer').then(m => ({ default: m.Optimizer })));
 const Prompts = lazy(() => import('./pages/Prompt').then(m => ({ default: m.Prompts })));
-const Results = lazy(() => import('./pages/Results').then(m => ({ default: m.Results })));
 const FleetView = lazy(() => import('./pages/FleetView').then(m => ({ default: m.FleetView })));
 
 // Loading component
@@ -32,9 +30,9 @@ export default function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/profiler" element={<Profiler />} />
                 <Route path="/model" element={<ModelAnalysis />} />
-                <Route path="/optimizer" element={<Optimizer />} />
+                <Route path="/optimizer" element={<Navigate to="/model" replace />} />
+                <Route path="/results" element={<Navigate to="/model" replace />} />
                 <Route path="/prompt" element={<Prompts />} />
-                <Route path="/results" element={<Results />} />
                 <Route path="/fleet" element={<FleetView />} />
               </Route>
             </Routes>
