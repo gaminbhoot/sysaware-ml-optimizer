@@ -34,7 +34,7 @@ def start_beacon(api_port: int):
 
 def discover_server(timeout: float = 2.0) -> str | None:
     """Listens for a server beacon on the client side, with a local fallback."""
-    print("Discovery: Searching for SysAware server on local network...")
+    logger.info("Discovery: Searching for SysAware server on local network...")
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
@@ -53,7 +53,7 @@ def discover_server(timeout: float = 2.0) -> str | None:
                         server_ip = addr[0]
                         api_port = message.get("api_port", 8000)
                         discovered = f"http://{server_ip}:{api_port}"
-                        print(f"Discovery: Found server at {discovered}")
+                        logger.info(f"Discovery: Found server at {discovered}")
                         return discovered
                 except (socket.timeout, json.JSONDecodeError):
                     continue
@@ -62,7 +62,7 @@ def discover_server(timeout: float = 2.0) -> str | None:
                     break
     
     # Local Fallback: If we're on the same machine, try localhost
-    print("Discovery: No server found via UDP. Checking for local instance...")
+    logger.info("Discovery: No server found via UDP. Checking for local instance...")
     try:
         import requests
         # Try common local addresses
@@ -72,12 +72,12 @@ def discover_server(timeout: float = 2.0) -> str | None:
                 res = requests.get(f"http://{host}:8000/api/system", timeout=0.5)
                 if res.status_code == 200:
                     fallback = f"http://{host}:8000"
-                    print(f"Discovery: Local server detected at {fallback}")
+                    logger.info(f"Discovery: Local server detected at {fallback}")
                     return fallback
             except:
                 continue
     except:
         pass
                 
-    print("Discovery: No server detected.")
+    logger.info("Discovery: No server detected.")
     return None
