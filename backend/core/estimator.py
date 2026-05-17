@@ -8,6 +8,8 @@ from typing import Any
 from .contracts import PerformanceEstimate
 from .logging_utils import get_logger
 from .benchmark import run_llm_benchmark
+
+logger = get_logger(__name__)
 def _dtype_size_bytes(dtype: Any) -> int:
 	try:
 		import torch

@@ -1,3 +1,5 @@
+import sys
+
 from types import SimpleNamespace
 
 import pytest
@@ -65,7 +67,7 @@ def test_estimate_performance_static_memory_uses_parameter_sizes(
     dtype_size: int,
     expected_memory: float,
 ) -> None:
-    monkeypatch.setattr(estimator, "torch", None)
+    monkeypatch.setitem(sys.modules, "torch", None)
     model = FakeModel([FakeParameter(numel)])
     result = estimator.estimate_performance(model, {"gpu_available": False, "ram_gb": 8.0, "gpu_vram_gb": 0.0})
     assert result["memory_mb"] == pytest.approx(expected_memory, rel=1e-6)
@@ -85,7 +87,7 @@ def test_estimate_performance_rejects_non_dict_profile() -> None:
 
 
 def test_estimate_performance_static_fallback_when_torch_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(estimator, "torch", None)
+    monkeypatch.setitem(sys.modules, "torch", None)
     model = FakeModel([FakeParameter(100)])
     result = estimator.estimate_performance(model, {"gpu_available": False, "ram_gb": 2.0, "gpu_vram_gb": 0.0})
     assert result["method"] == "static"
@@ -114,7 +116,7 @@ def test_estimate_performance_uses_benchmark_when_torch_available(monkeypatch: p
         zeros=lambda batch, width: SimpleNamespace(to=lambda device: SimpleNamespace()),
         no_grad=lambda: FakeNoGrad(),
     )
-    monkeypatch.setattr(estimator, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
 
     model = FakeModel([FakeParameter(100)], output_value="ok")
     result = estimator.estimate_performance(model, {"gpu_available": False, "ram_gb": 16.0, "gpu_vram_gb": 0.0})
@@ -127,7 +129,7 @@ def test_estimate_performance_uses_benchmark_when_torch_available(monkeypatch: p
 
 
 def test_estimate_performance_benchmark_failure_falls_back_to_static(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(estimator, "torch", None)
+    monkeypatch.setitem(sys.modules, "torch", None)
     model = ExplodingForwardModel([FakeParameter(25)])
     result = estimator.estimate_performance(model, {"gpu_available": False, "ram_gb": 4.0, "gpu_vram_gb": 0.0})
     assert result["method"] == "static"
@@ -136,7 +138,7 @@ def test_estimate_performance_benchmark_failure_falls_back_to_static(monkeypatch
 
 
 def test_estimate_performance_handles_no_eval_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(estimator, "torch", None)
+    monkeypatch.setitem(sys.modules, "torch", None)
     model = NoEvalModel()
     result = estimator.estimate_performance(model, {"gpu_available": False, "ram_gb": 4.0, "gpu_vram_gb": 0.0})
     assert result["method"] == "static"
@@ -165,7 +167,7 @@ def test_estimate_performance_prefers_benchmark_memory_when_higher(monkeypatch: 
         zeros=lambda batch, width: SimpleNamespace(to=lambda device: SimpleNamespace()),
         no_grad=lambda: FakeNoGrad(),
     )
-    monkeypatch.setattr(estimator, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
 
     model = FakeModel([FakeParameter(1)])
     result = estimator.estimate_performance(model, {"gpu_available": False, "ram_gb": 16.0, "gpu_vram_gb": 0.0})
@@ -174,19 +176,19 @@ def test_estimate_performance_prefers_benchmark_memory_when_higher(monkeypatch: 
 
 
 def test_estimate_performance_batch_size_rule_cpu_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(estimator, "torch", None)
+    monkeypatch.setitem(sys.modules, "torch", None)
     profile = {"gpu_available": False, "ram_gb": 8.0, "gpu_vram_gb": 0.0}
     assert estimator._get_batch_size(profile) == 1
 
 
 def test_estimate_performance_batch_size_rule_mid_ram(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(estimator, "torch", None)
+    monkeypatch.setitem(sys.modules, "torch", None)
     profile = {"gpu_available": False, "ram_gb": 16.0, "gpu_vram_gb": 0.0}
     assert estimator._get_batch_size(profile) == 4
 
 
 def test_estimate_performance_batch_size_rule_gpu_profile(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(estimator, "torch", None)
+    monkeypatch.setitem(sys.modules, "torch", None)
     profile = {"gpu_available": True, "ram_gb": 16.0, "gpu_vram_gb": 12.0}
     assert estimator._get_batch_size(profile) == 8
 
@@ -194,7 +196,7 @@ def test_estimator_tracemalloc(monkeypatch: pytest.MonkeyPatch) -> None:
     import torch
     import torch.nn as nn
     import core.estimator as estimator
-    monkeypatch.setattr(estimator, "torch", torch)
+    monkeypatch.setitem(sys.modules, "torch", torch)
     
     class ToyModel(nn.Module):
         def __init__(self):
@@ -220,7 +222,7 @@ def test_estimator_dynamic_iterations(monkeypatch: pytest.MonkeyPatch) -> None:
     import time
     import torch.nn as nn
     import core.estimator as estimator
-    monkeypatch.setattr(estimator, "torch", torch)
+    monkeypatch.setitem(sys.modules, "torch", torch)
     
     class FastModel(nn.Module):
         def __init__(self):

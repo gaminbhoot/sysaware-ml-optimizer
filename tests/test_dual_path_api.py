@@ -8,7 +8,7 @@ client = TestClient(app)
 def test_diagnose_custom_stream_content():
     """AC-A3, AC-A4: Test that the diagnostic stream yields data chunks."""
     payload = {
-        "model_path": "temp_model.pt",
+        "model_path": "artifacts/temp_model.pt",
         "unsafe_load": True
     }
     with client.stream("POST", "/api/diagnose/custom/stream", json=payload) as response:

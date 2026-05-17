@@ -10,7 +10,7 @@ def test_autotune_stream():
     # Note: server.py needs to be running.
     # We need a dummy model and system profile.
     payload = {
-        "model_path": "temp_model.pt",
+        "model_path": "artifacts/temp_model.pt",
         "system_profile": {
             "device": "cpu",
             "ram_gb": 16,
