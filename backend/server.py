@@ -140,6 +140,16 @@ class LMStudioSyncRequest(BaseModel):
     host: str = "127.0.0.1"
     port: int = 1234
 
+class ModelLoadRequest(BaseModel):
+    model_id: str
+    host: str = "127.0.0.1"
+    port: int = 1234
+
+class UnloadRequest(BaseModel):
+    model_id: str | None = None
+    host: str = "127.0.0.1"
+    port: int = 1234
+
 class DiagnosticRequest(BaseModel):
     model_path: str
     unsafe_load: bool = False
@@ -259,18 +269,56 @@ async def clear_telemetry(range_type: str = "all"):
 
 @app.post("/api/lmstudio/sync")
 async def sync_lmstudio(req: LMStudioSyncRequest):
-    print(f"Sync attempt with LM Studio at {req.host}:{req.port}")
+    print(f"\n--- LM STUDIO SYNC ATTEMPT ---")
+    print(f"Target: {req.host}:{req.port}")
     try:
         client = lms.LMStudioClient(host=req.host, port=req.port)
         analysis = await anyio.to_thread.run_sync(client.sync_loaded_model)
         if not analysis:
-            print(f"Sync failed: No model found or connection error at {req.host}:{req.port}")
-            raise HTTPException(status_code=404, detail=f"No loaded model found in LM Studio or connection failed at {req.host}:{req.port}. Ensure 'Local Server' is ON in LM Studio.")
-        print(f"Sync success: Found model {analysis['model_name']}")
+            print(f"Sync Result: FAIL - No active model detected.")
+            raise HTTPException(status_code=404, detail=f"No loaded model found in LM Studio at {req.host}:{req.port}. Check if 'Local Server' is ON and a model is loaded.")
+        print(f"Sync Result: SUCCESS - Active model: {analysis['model_name']}")
+        print(f"-------------------------------\n")
         return {"status": "success", "analysis": analysis}
     except Exception as e:
-        if isinstance(e, HTTPException): raise e
-        print(f"Sync error: {str(e)}")
+        if isinstance(e, HTTPException): 
+            print(f"Sync Result: HTTP ERROR - {e.detail}")
+            raise e
+        print(f"Sync Result: UNEXPECTED ERROR - {str(e)}")
+        print(f"-------------------------------\n")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/lmstudio/models")
+async def list_lmstudio_models(host: str = "127.0.0.1", port: int = 1234):
+    try:
+        client = lms.LMStudioClient(host=host, port=port)
+        models = await anyio.to_thread.run_sync(client.get_all_models)
+        return {"status": "success", "models": models}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/lmstudio/load")
+async def load_lmstudio_model(req: ModelLoadRequest):
+    try:
+        client = lms.LMStudioClient(host=req.host, port=req.port)
+        success = await anyio.to_thread.run_sync(client.load_model, req.model_id)
+        if success:
+            return {"status": "success"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to load model in LM Studio")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/lmstudio/unload")
+async def unload_lmstudio_model(req: UnloadRequest):
+    try:
+        client = lms.LMStudioClient(host=req.host, port=req.port)
+        success = await anyio.to_thread.run_sync(client.unload_model, req.model_id)
+        if success:
+            return {"status": "success"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to unload model in LM Studio")
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/fleet/active")
@@ -431,8 +479,16 @@ async def analyze_model_endpoint(req: AnalyzeRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/model/unload")
-async def unload_model():
-    return {"status": "success", "message": "Model unloaded from memory"}
+async def unload_model(req: UnloadRequest):
+    try:
+        # If we have LM Studio info, try to unload there too
+        client = lms.LMStudioClient(host=req.host, port=req.port)
+        await anyio.to_thread.run_sync(client.unload_model, req.model_id)
+        return {"status": "success", "message": f"Model {req.model_id or ''} unloaded from memory"}
+    except Exception as e:
+        # We don't want to fail the whole thing if LM Studio unload fails
+        print(f"Model Unload: LM Studio unload failed: {e}")
+        return {"status": "success", "message": "Model unloaded from local memory (LM Studio sync failed)"}
 
 @app.post("/api/optimize/baseline")
 async def estimate_baseline(req: BaselineRequest):

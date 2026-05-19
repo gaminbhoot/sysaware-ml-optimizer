@@ -56,7 +56,8 @@ export const ModelAnalysis = () => {
     isRuntimeTuning, setIsRuntimeTuning,
     runtimeTuningProgress, setRuntimeTuningProgress,
     optimalRuntimeConfig, setOptimalRuntimeConfig,
-    systemProfile
+    systemProfile,
+    availableModels, setAvailableModels
   } = useStore();
   
   const { addNotification } = useNotification();
@@ -66,6 +67,63 @@ export const ModelAnalysis = () => {
   const [hubTab, setHubTab] = useState<'inspect' | 'diagnose' | 'tune'>('inspect');
 
   // --- Handlers ---
+
+  const fetchLMStudioModels = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/lmstudio/models?host=${lmStudioHost}&port=${lmStudioPort}`);
+      const data = await res.json();
+      if (data.status === 'success') {
+        setAvailableModels(data.models);
+      }
+    } catch (e: any) {
+      addNotification({ type: 'error', title: 'Fetch Failed', message: 'Could not list LM Studio models' });
+    }
+    setLoading(false);
+  };
+
+  const loadLMStudioModel = async (modelId: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/lmstudio/load', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_id: modelId, host: lmStudioHost, port: lmStudioPort })
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        addNotification({ type: 'success', title: 'Model Loaded', message: `Model ${modelId} is now active` });
+        syncLMStudio(); // Sync metadata
+      } else {
+        throw new Error(data.detail || 'Load failed');
+      }
+    } catch (e: any) {
+      addNotification({ type: 'error', title: 'Load Failed', message: e.message });
+    }
+    setLoading(false);
+  };
+
+  const unloadModel = async () => {
+    setLoading(true);
+    try {
+      await fetch('/api/model/unload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          model_id: modelAnalysis?.model_id || modelAnalysis?.model_name,
+          host: lmStudioHost,
+          port: lmStudioPort
+        })
+      });
+      setModelAnalysis(null);
+      if (activeMode === 'path') setModelPath("");
+      setDiagnosticFindings([]);
+      addNotification({ type: 'success', title: 'Model Unloaded', message: 'Memory cleared across backends' });
+    } catch (e) {
+      addNotification({ type: 'error', title: 'Unload Failed', message: 'Memory could not be cleared' });
+    }
+    setLoading(false);
+  };
 
   const analyzeModel = async () => {
     if (!modelPath) return;
@@ -316,7 +374,15 @@ export const ModelAnalysis = () => {
                         </div>
                       ) : (
                         <div className="flex flex-col gap-4">
-                          <label className="text-luxury-mono text-[10px] tracking-widest uppercase text-white/40">LM Studio Server Instance</label>
+                          <div className="flex justify-between items-center">
+                            <label className="text-luxury-mono text-[10px] tracking-widest uppercase text-white/40">LM Studio Server Instance</label>
+                            <button 
+                              onClick={fetchLMStudioModels}
+                              className="text-[10px] font-mono uppercase tracking-widest text-emerald hover:text-emerald/80 flex items-center gap-2 transition-colors"
+                            >
+                              <RefreshCcw size={12} className={loading ? "animate-spin" : ""} /> Sync Library
+                            </button>
+                          </div>
                           <div className="relative flex flex-col md:flex-row gap-4">
                             <div className="relative flex-1 group/input">
                               <input
@@ -338,6 +404,48 @@ export const ModelAnalysis = () => {
                               />
                             </div>
                           </div>
+
+                          {/* Available Models List */}
+                          <AnimatePresence>
+                            {availableModels.length > 0 && (
+                              <motion.div 
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="mt-6 flex flex-col gap-3 overflow-hidden"
+                              >
+                                <label className="text-luxury-mono text-[9px] tracking-widest uppercase text-white/20 mb-2">Downloaded Models</label>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  {availableModels.map((model) => {
+                                    // Use model_id for load/unload operations as it's the unique identifier
+                                    const isActive = modelAnalysis?.model_id === model.model_id;
+                                    return (
+                                      <button
+                                        key={model.model_id || model.model_name}
+                                        onClick={() => !isActive && loadLMStudioModel(model.model_id || model.model_name)}
+                                        className={cn(
+                                          "p-4 rounded-xl border text-left transition-all group flex items-center justify-between",
+                                          isActive 
+                                            ? "bg-emerald/10 border-emerald/30 text-emerald" 
+                                            : "bg-white/[0.02] border-white/5 text-white/60 hover:border-white/10 hover:bg-white/[0.04]"
+                                        )}
+                                      >
+                                        <div className="flex flex-col gap-1 overflow-hidden">
+                                          <span className="text-[11px] font-medium truncate">{model.model_name}</span>
+                                          <span className="text-[9px] font-mono opacity-40 uppercase">{(model.num_params / 1e9).toFixed(1)}B Params</span>
+                                        </div>
+                                        {isActive ? (
+                                          <CheckCircle2 size={14} className="flex-shrink-0" />
+                                        ) : (
+                                          <Zap size={14} className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
                       )}
 
@@ -356,24 +464,40 @@ export const ModelAnalysis = () => {
                             ) : (
                               <>
                                 {activeMode === 'path' ? <Search size={16} /> : <RefreshCcw size={16} className="group-hover:rotate-180 transition-transform duration-500" />}
-                                <span>{activeMode === 'path' ? 'Inspect Model' : 'Sync with Studio'}</span>
+                                <span>{activeMode === 'path' ? 'Inspect Model' : 'Sync Active Model'}</span>
                               </>
                             )}
                           </button>
 
                           {modelAnalysis && (
                             <button
-                              onClick={() => {
-                                setModelAnalysis(null);
-                                if (activeMode === 'path') setModelPath('');
+                              onClick={async () => {
+                                setLoading(true);
+                                try {
+                                  await fetch('/api/model/unload', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ 
+                                      model_id: modelAnalysis.model_id || modelAnalysis.model_name,
+                                      host: lmStudioHost,
+                                      port: lmStudioPort
+                                    })
+                                  });
+                                  setModelAnalysis(null);
+                                  setModelPath("");
+                                  setDiagnosticFindings([]);
+                                  addNotification({ type: 'success', title: 'Model Unloaded', message: 'Memory cleared across backends' });
+                                } catch (e) {
+                                  addNotification({ type: 'error', title: 'Unload Failed', message: 'Memory could not be cleared' });
+                                }
+                                setLoading(false);
                               }}
                               className="p-6 rounded-2xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all border border-red-500/20"
                               title="Unload Model"
                             >
                               <Trash2 size={20} />
                             </button>
-                          )}
-                        </div>
+                          )}                        </div>
                       </div>
                     </div>
                   </div>

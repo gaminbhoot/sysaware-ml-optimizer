@@ -37,6 +37,8 @@ interface StoreState {
   setRuntimeTuningProgress: Dispatch<SetStateAction<any[]>>;
   optimalRuntimeConfig: any;
   setOptimalRuntimeConfig: Dispatch<SetStateAction<any>>;
+  availableModels: any[];
+  setAvailableModels: Dispatch<SetStateAction<any[]>>;
 }
 
 const StoreContext = createContext<StoreState | undefined>(undefined);
@@ -65,6 +67,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [runtimeTuningProgress, setRuntimeTuningProgress] = useState<any[]>([]);
   const [optimalRuntimeConfig, setOptimalRuntimeConfig] = useState<any>(null);
 
+  const [availableModels, setAvailableModels] = useState<any[]>([]);
+
   return (
     <StoreContext.Provider value={{
       systemProfile, setSystemProfile,
@@ -82,7 +86,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       diagnosticFindings, setDiagnosticFindings,
       isRuntimeTuning, setIsRuntimeTuning,
       runtimeTuningProgress, setRuntimeTuningProgress,
-      optimalRuntimeConfig, setOptimalRuntimeConfig
+      optimalRuntimeConfig, setOptimalRuntimeConfig,
+      availableModels, setAvailableModels
     }}>
       {children}
     </StoreContext.Provider>
