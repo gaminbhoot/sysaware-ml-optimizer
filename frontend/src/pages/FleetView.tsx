@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Server, Cpu, Zap, History, LayoutGrid, List, Trash2, Activity, Filter, RefreshCcw, BarChart2, ChevronDown, Calendar } from 'lucide-react';
+import { Server, Zap, History, LayoutGrid, List, Trash2, Activity, Filter, RefreshCcw, BarChart2, ChevronDown, Calendar } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useNotification } from '../context/NotificationContext';
 import { FleetChart } from '../components/FleetChart';
@@ -56,7 +56,44 @@ export const FleetView = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showClearDropdown, setShowClearDropdown] = useState(false);
+  const [statsScope, setStatsScope] = useState<'session' | 'alltime'>('session');
+  const [copiedText, setCopiedText] = useState<string | null>(null);
   
+  const handleCopy = useCallback((text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedText(text);
+    addNotification({
+      type: 'success',
+      message: 'Copied to clipboard!'
+    });
+    setTimeout(() => setCopiedText(null), 2000);
+  }, [addNotification]);
+
+  const getScopedHistory = useCallback(() => {
+    if (statsScope === 'session') {
+      const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
+      const sessionItems = history.filter(h => new Date(h.timestamp) >= fifteenMinsAgo);
+      return sessionItems.length > 0 ? sessionItems : history.slice(0, 10);
+    }
+    return history;
+  }, [history, statsScope]);
+
+  const scopedHistory = getScopedHistory();
+
+  const peakPerformance = scopedHistory.length > 0 
+    ? Math.max(...scopedHistory.map(h => h.decode_tokens_per_sec || 0), 0)
+    : 0;
+
+  const prefillRecords = scopedHistory.filter(h => h.prefill_latency_ms !== undefined && h.prefill_latency_ms > 0);
+  const avgPrefill = prefillRecords.length > 0
+    ? prefillRecords.reduce((acc, h) => acc + (h.prefill_latency_ms || 0), 0) / prefillRecords.length
+    : 0;
+
+  const decodeRecords = scopedHistory.filter(h => h.decode_tokens_per_sec !== undefined && h.decode_tokens_per_sec > 0);
+  const avgDecode = decodeRecords.length > 0
+    ? decodeRecords.reduce((acc, h) => acc + (h.decode_tokens_per_sec || 0), 0) / decodeRecords.length
+    : 0;
+
   const [confirmConfig, setConfirmConfig] = useState<ConfirmConfig>({
     isOpen: false,
     title: '',
@@ -317,12 +354,14 @@ export const FleetView = () => {
       {/* Header Section */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-12 lg:mb-16 gap-8">
         <div>
-          <h1 className="text-luxury-header mb-2 tracking-tighter">Infrastructure</h1>
-          <p className="text-luxury-subheading text-muted text-sm md:text-base max-w-xl font-light">Manage active benchmarking nodes and historical performance data across your distributed system.</p>
+          <h1 className="text-4xl md:text-5xl font-light tracking-tighter mb-2">
+            Fleet <span className="text-white/20 italic">Status</span>
+          </h1>
+          <p className="text-luxury-subheading text-muted text-sm md:text-base max-w-xl font-light">Real-time distributed telemetry, system performance, and active nodes.</p>
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 md:gap-6 w-full lg:w-auto">
-           {/* Tab Switcher */}
+          {/* Tab Switcher */}
           <div className="flex p-1 bg-white/[0.03] rounded-xl overflow-x-auto no-scrollbar scroll-smooth">
             <TabButton active={activeTab === 'live'} onClick={() => setActiveTab('live')} icon={Activity} label="Live" count={activeNodes.length} />
             <TabButton active={activeTab === 'charts'} onClick={() => setActiveTab('charts')} icon={BarChart2} label="Charts" />
@@ -331,24 +370,93 @@ export const FleetView = () => {
 
           <div className="hidden sm:block h-8 w-px bg-border" />
 
-          <button 
-            onClick={fetchData}
-            aria-label="Refresh telemetry data"
-            className={cn("flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-white/[0.03] text-silver/40 hover:text-silver transition-all", isRefreshing && "text-emerald")}
-          >
-            <RefreshCcw size={18} className={cn(isRefreshing && "animate-spin")} />
-            <span className="text-xs font-medium sm:hidden">Refresh Data</span>
-          </button>
+          {/* Scope Toggle & Refresh button */}
+          <div className="flex items-center gap-4">
+            <div className="flex bg-white/[0.03] border border-white/[0.05] rounded-xl p-1 text-xs">
+              <button 
+                onClick={() => setStatsScope('session')}
+                className={cn("px-3 py-1.5 rounded-lg transition-all", statsScope === 'session' ? "bg-white/10 text-white font-medium shadow-md" : "text-silver/40 hover:text-silver/80")}
+              >
+                Session
+              </button>
+              <button 
+                onClick={() => setStatsScope('alltime')}
+                className={cn("px-3 py-1.5 rounded-lg transition-all", statsScope === 'alltime' ? "bg-white/10 text-white font-medium shadow-md" : "text-silver/40 hover:text-silver/80")}
+              >
+                All-time
+              </button>
+            </div>
+
+            <button 
+              onClick={fetchData}
+              aria-label="Refresh telemetry data"
+              className={cn("flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-white/[0.03] text-silver/40 hover:text-silver transition-all", isRefreshing && "text-emerald")}
+            >
+              <RefreshCcw size={18} className={cn(isRefreshing && "animate-spin")} />
+              <span className="text-xs font-medium sm:hidden">Refresh Data</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Analytics Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-12">
-        <StatsCard label="Fleet Status" value={activeNodes.length > 0 ? "Operational" : "Idle"} icon={Server} color={activeNodes.length > 0 ? "text-emerald" : "text-muted"} />
-        <StatsCard label="Peak Performance" value={`${Math.max(...history.map(h => h.decode_tokens_per_sec || 0), 0).toFixed(1)} T/S`} icon={Zap} />
-        <StatsCard label="Total Benchmarks" value={history.length.toString()} icon={History} />
-        <StatsCard label="Connection" value={isConnected ? "Active" : "Offline"} icon={Cpu} color={isConnected ? "text-emerald" : "text-rose-500"} />
+      {/* Analytics Overview (Three cards grid matching omlx structure) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8">
+        <StatsCard 
+          label="Active Nodes" 
+          value={`${activeNodes.filter(n => n.status === 'active' || n.status === 'benchmarking').length} / ${activeNodes.length} Online`} 
+          icon={Server} 
+          color={activeNodes.length > 0 ? "text-emerald" : "text-muted"} 
+        />
+        <StatsCard 
+          label="Peak Performance" 
+          value={`${peakPerformance.toFixed(1)} T/S`} 
+          icon={Zap} 
+        />
+        <StatsCard 
+          label="Total Benchmarks" 
+          value={`${scopedHistory.length} logs`} 
+          icon={History} 
+        />
       </div>
+
+      {/* Speed Stats Panel (omlx design) */}
+      <Card className="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 md:p-8 border-transparent mb-12 relative overflow-hidden bg-white/[0.02]">
+        {/* Background visual accents */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald/5 rounded-full blur-[80px] pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-white/5 rounded-full blur-[80px] pointer-events-none" />
+        
+        <div className="flex flex-col justify-between pr-0 md:pr-8 md:border-r border-white/5">
+          <div>
+            <p className="text-luxury-mono mb-1 text-[9px] md:text-[11px] opacity-40 uppercase tracking-widest">Average Prefill Latency</p>
+            <h2 className="text-3xl md:text-5xl font-nistha mt-2 text-white font-light">
+              {avgPrefill > 0 ? `${avgPrefill.toFixed(0)}` : '—'} <span className="text-lg md:text-2xl text-muted font-sans font-light">ms</span>
+            </h2>
+            <p className="text-xs text-muted mt-2 font-light leading-relaxed">Time to process prompt tokens before output starts. Lower is better.</p>
+          </div>
+          <div className="mt-6 flex items-center gap-2">
+            <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-emerald animate-pulse" : "bg-rose-500")} />
+            <span className={cn("text-xs font-medium", isConnected ? "text-emerald" : "text-rose-500")}>
+              {isConnected ? "Real-time telemetry" : "Telemetry offline"}
+            </span>
+          </div>
+        </div>
+        
+        <div className="flex flex-col justify-between pl-0 md:pl-8">
+          <div>
+            <p className="text-luxury-mono mb-1 text-[9px] md:text-[11px] opacity-40 uppercase tracking-widest">Average Token Generation</p>
+            <h2 className="text-3xl md:text-5xl font-nistha mt-2 text-white font-light">
+              {avgDecode > 0 ? `${avgDecode.toFixed(1)}` : '—'} <span className="text-lg md:text-2xl text-muted font-sans font-light">tok/s</span>
+            </h2>
+            <p className="text-xs text-muted mt-2 font-light leading-relaxed">Average decode throughput speed during text generation. Higher is better.</p>
+          </div>
+          <div className="mt-6 flex items-center gap-2">
+            <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-emerald animate-pulse" : "bg-rose-500")} />
+            <span className={cn("text-xs font-medium", isConnected ? "text-emerald" : "text-rose-500")}>
+              {isConnected ? "Active streaming" : "Disconnected"}
+            </span>
+          </div>
+        </div>
+      </Card>
 
       {/* Main Content Area Controls */}
       <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -431,15 +539,72 @@ export const FleetView = () => {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className={cn("grid gap-4 md:gap-6", viewMode === 'grid' ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3" : "grid-cols-1")}
+            className="grid grid-cols-1 lg:grid-cols-4 gap-6"
           >
-            {activeNodes.length === 0 ? (
-              <EmptyState message="No active nodes detected. Ensure your CLI or Server is running." />
-            ) : (
-              activeNodes.map(node => (
-                <LiveNodeCard key={node.machine_id} node={node} onDelete={() => handleDeleteNode(node.machine_id)} />
-              ))
-            )}
+            <div className={cn("grid gap-4 md:gap-6 lg:col-span-3", viewMode === 'grid' ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3" : "grid-cols-1")}>
+              {activeNodes.length === 0 ? (
+                <EmptyState message="No active nodes detected. Ensure your CLI or Server is running." />
+              ) : (
+                activeNodes.map(node => (
+                  <LiveNodeCard key={node.machine_id} node={node} onDelete={() => handleDeleteNode(node.machine_id)} />
+                ))
+              )}
+            </div>
+            
+            <div className="col-span-1">
+              <Card className="p-6 border-transparent bg-white/[0.01] flex flex-col justify-between h-full min-h-[300px]">
+                <div>
+                  <h4 className="text-sm text-white font-medium mb-3 flex items-center gap-2">
+                    <Server size={14} className="text-silver/60" />
+                    Connection Ingestion
+                  </h4>
+                  <p className="text-xs text-muted mb-6 font-light leading-relaxed">
+                    Configure external benchmark client nodes to stream real-time metrics back to this management console.
+                  </p>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-[10px] text-muted mb-1 uppercase font-mono tracking-wider">Ingestion Target</p>
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-black/20 border border-white/5 font-mono text-[11px] text-silver/80">
+                        <span className="truncate pr-2">http://localhost:8000/api/telemetry/ingest</span>
+                        <button 
+                          onClick={() => handleCopy("http://localhost:8000/api/telemetry/ingest")}
+                          className="text-silver/40 hover:text-white transition-colors hover:underline text-[10px]"
+                        >
+                          {copiedText === "http://localhost:8000/api/telemetry/ingest" ? "Copied!" : "Copy"}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <p className="text-[10px] text-muted mb-1 uppercase font-mono tracking-wider">OpenAI Proxy URL</p>
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-black/20 border border-white/5 font-mono text-[11px] text-silver/80">
+                        <span className="truncate pr-2">http://localhost:8000/v1</span>
+                        <button 
+                          onClick={() => handleCopy("http://localhost:8000/v1")}
+                          className="text-silver/40 hover:text-white transition-colors hover:underline text-[10px]"
+                        >
+                          {copiedText === "http://localhost:8000/v1" ? "Copied!" : "Copy"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="mt-8 pt-4 border-t border-white/5">
+                  <p className="text-[10px] text-muted mb-2 uppercase font-mono tracking-wider">CLI Launch Command</p>
+                  <div className="p-3 bg-black/30 border border-white/5 rounded-xl font-mono text-[10px] text-silver/90 whitespace-pre overflow-x-auto relative group">
+                    <code>{`export SYSAWARE_INGEST_URL="http://localhost:8000/api/telemetry/ingest"\npython -m sysaware_client --interval 5`}</code>
+                    <button 
+                      onClick={() => handleCopy(`export SYSAWARE_INGEST_URL="http://localhost:8000/api/telemetry/ingest"\npython -m sysaware_client --interval 5`)}
+                      className="absolute top-2 right-2 text-silver/40 hover:text-white text-[10px] bg-white/5 px-2 py-0.5 rounded transition-all opacity-0 group-hover:opacity-100 font-sans"
+                    >
+                      {copiedText === `export SYSAWARE_INGEST_URL="http://localhost:8000/api/telemetry/ingest"\npython -m sysaware_client --interval 5` ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+              </Card>
+            </div>
           </motion.div>
         ) : activeTab === 'charts' ? (
           <motion.div 

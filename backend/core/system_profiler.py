@@ -171,6 +171,48 @@ def get_system_profile() -> SystemProfile:
 		except Exception as exc:
 			logger.warning("iGPU fallback detection failed: %s", exc)
 
+	if not profile.get("gpu_available") and platform.system() == "Darwin":
+		try:
+			import subprocess
+			import re
+			output = subprocess.check_output("system_profiler SPDisplaysDataType", shell=True, text=True, stderr=subprocess.DEVNULL)
+			# Find all GPU blocks
+			gpu_blocks = output.split("Chipset Model: ")[1:]
+			for block in gpu_blocks:
+				lines = block.split("\n")
+				gpu_name = lines[0].strip()
+				is_discrete = "PCI" in block or "Discrete" in block
+				
+				# Skip virtual or basic if possible
+				if "virtual" in gpu_name.lower():
+					continue
+					
+				profile["gpu_available"] = True
+				profile["gpu_name"] = gpu_name
+				profile["gpu_backend"] = "metal"
+				
+				# Try to find VRAM
+				vram_match = re.search(r"VRAM \(Total\): (.*)", block)
+				if vram_match:
+					vram_str = vram_match.group(1).strip()
+					if "GB" in vram_str:
+						profile["gpu_vram_gb"] = float(vram_str.split("GB")[0].strip())
+					elif "MB" in vram_str:
+						profile["gpu_vram_gb"] = float(vram_str.split("MB")[0].strip()) / 1024.0
+				
+				if is_discrete:
+					profile["dgpu_name"] = gpu_name
+					profile["dgpu_vram_gb"] = profile.get("gpu_vram_gb", 0.0)
+				else:
+					profile["igpu_name"] = gpu_name
+					profile["igpu_vram_gb"] = profile.get("gpu_vram_gb", 0.0)
+				
+				# Break after first significant GPU
+				if profile["gpu_name"] != "None":
+					break
+		except Exception as exc:
+			logger.warning("Darwin GPU fallback detection failed: %s", exc)
+
 	try:
 		import subprocess
 		import re

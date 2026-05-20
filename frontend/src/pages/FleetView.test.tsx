@@ -34,7 +34,7 @@ describe('FleetView Robustness', () => {
 
     renderWithProviders(<FleetView />);
 
-    expect(screen.getByText('Infrastructure')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Fleet Status/i })).toBeInTheDocument();
     
     await waitFor(() => {
       expect(screen.getByText('No active nodes detected. Ensure your CLI or Server is running.')).toBeInTheDocument();
@@ -47,8 +47,7 @@ describe('FleetView Robustness', () => {
 
     renderWithProviders(<FleetView />);
 
-    // Should still show the heading even if data fetch fails
-    expect(screen.getByText('Infrastructure')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Fleet Status/i })).toBeInTheDocument();
     
     // Should show error notification
     await waitFor(() => {
@@ -94,7 +93,7 @@ describe('FleetView Robustness', () => {
     renderWithProviders(<FleetView />);
 
     await waitFor(() => {
-      expect(screen.getByText('Infrastructure')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Fleet Status/i })).toBeInTheDocument();
     });
     
     // Should not crash and show empty state
