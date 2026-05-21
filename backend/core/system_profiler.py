@@ -171,7 +171,13 @@ def get_system_profile() -> SystemProfile:
 		except Exception as exc:
 			logger.warning("iGPU fallback detection failed: %s", exc)
 
-	if not profile.get("gpu_available") and platform.system() == "Darwin":
+	is_darwin = False
+	try:
+		is_darwin = platform.system() == "Darwin"
+	except Exception:
+		pass
+
+	if not profile.get("gpu_available") and is_darwin:
 		try:
 			import subprocess
 			import re

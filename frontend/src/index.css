@@ -23,7 +23,9 @@
   --color-text-muted: #9CA3AF;
   
   --color-accent-emerald: #10B981;
+  --color-accent-emerald-rgb: 16 185 129;
   --color-accent-rose: #F43F5E;
+  --color-accent-rose-rgb: 244 63 94;
 
   /* Typography */
   --font-family-display: "Nistha", serif;

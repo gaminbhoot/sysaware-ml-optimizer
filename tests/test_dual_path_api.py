@@ -76,3 +76,23 @@ def test_estimate_inference_hardware_aware():
     data = response.json()
     assert data["is_ram_spill"] is True
     assert data["method"] == "spill-fallback"
+
+def test_get_recommendations():
+    """Verify that the model recommendations endpoint returns a valid response."""
+    response = client.get("/api/models/recommendations")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "recommendations" in data
+    recs = data["recommendations"]
+    assert len(recs) > 0
+    
+    for r in recs:
+        assert "repo_id" in r
+        assert "name" in r
+        assert "size" in r
+        assert "format" in r
+        assert "description" in r
+        assert "ramNeeded" in r
+        assert "link" in r
+        assert isinstance(r["ramNeeded"], int)

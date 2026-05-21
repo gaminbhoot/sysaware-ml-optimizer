@@ -154,6 +154,9 @@ export const ModelAnalysis = () => {
   const [expandedPanel, setExpandedPanel] = useState<'selection' | 'recommendations'>('selection');
   const [hubTab, setHubTab] = useState<'inspect' | 'diagnose' | 'tune'>('inspect');
 
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+
   const fetchSystemProfile = async () => {
     try {
       const res = await fetch('/api/system');
@@ -166,226 +169,39 @@ export const ModelAnalysis = () => {
     }
   };
 
+  const fetchRecommendations = async () => {
+    setLoadingRecommendations(true);
+    try {
+      const res = await fetch('/api/models/recommendations');
+      const data = await res.json();
+      if (data.status === 'success') {
+        setRecommendations(data.recommendations);
+      }
+    } catch (e) {
+      console.error('Failed to fetch recommendations', e);
+    } finally {
+      setLoadingRecommendations(false);
+    }
+  };
+
   useEffect(() => {
     if (!systemProfile) {
       fetchSystemProfile();
     }
   }, []);
 
+  useEffect(() => {
+    if (systemProfile) {
+      fetchRecommendations();
+    }
+  }, [systemProfile]);
+
   const getHFRecommendations = () => {
     const ram = systemProfile?.ram_gb || 8;
     const isMac = systemProfile?.os?.toLowerCase().includes('mac') || systemProfile?.os?.toLowerCase().includes('darwin');
     const isMetal = systemProfile?.gpu_backend?.toLowerCase() === 'metal' || isMac;
 
-    const allModels = [
-      {
-        repo_id: "mlx-community/Llama-3.2-3B-Instruct-4bit",
-        name: "Llama 3.2 3B Instruct",
-        size: "3B",
-        format: "MLX (Apple Silicon)",
-        description: "Meta's highly capable lightweight model, optimized for mobile & edge devices on Apple Silicon.",
-        ramNeeded: 3,
-        link: "https://huggingface.co/mlx-community/Llama-3.2-3B-Instruct-4bit"
-      },
-      {
-        repo_id: "mlx-community/Phi-3.5-mini-instruct-4bit",
-        name: "Phi 3.5 Mini",
-        size: "3.8B",
-        format: "MLX (Apple Silicon)",
-        description: "Microsoft's state-of-the-art small language model with incredible reasoning for its size.",
-        ramNeeded: 3,
-        link: "https://huggingface.co/mlx-community/Phi-3.5-mini-instruct-4bit"
-      },
-      {
-        repo_id: "mlx-community/Meta-Llama-3-8B-Instruct-4bit",
-        name: "Llama 3 8B Instruct",
-        size: "8B",
-        format: "MLX (Apple Silicon)",
-        description: "The gold standard for 8B models. Superb dialogue, instruction following, and general reasoning.",
-        ramNeeded: 6,
-        link: "https://huggingface.co/mlx-community/Meta-Llama-3-8B-Instruct-4bit"
-      },
-      {
-        repo_id: "mlx-community/Gemma-2-9b-it-4bit",
-        name: "Gemma 2 9B IT",
-        size: "9B",
-        format: "MLX (Apple Silicon)",
-        description: "Google's ultra-efficient 9B model, known for clean outputs and strong factual accuracy.",
-        ramNeeded: 7,
-        link: "https://huggingface.co/mlx-community/Gemma-2-9b-it-4bit"
-      },
-      {
-        repo_id: "mlx-community/Qwen2.5-7B-Instruct-4bit",
-        name: "Qwen 2.5 7B Instruct",
-        size: "7B",
-        format: "MLX (Apple Silicon)",
-        description: "Outstanding multilingual capability and strong coding/math intelligence.",
-        ramNeeded: 5,
-        link: "https://huggingface.co/mlx-community/Qwen2.5-7B-Instruct-4bit"
-      },
-      {
-        repo_id: "mlx-community/Mistral-Nemo-12B-Instruct-v1-4bit",
-        name: "Mistral NeMo 12B",
-        size: "12B",
-        format: "MLX (Apple Silicon)",
-        description: "Collaborative effort between NVIDIA and Mistral. State-of-the-art for its size.",
-        ramNeeded: 9,
-        link: "https://huggingface.co/mlx-community/Mistral-Nemo-12B-Instruct-v1-4bit"
-      },
-      {
-        repo_id: "mlx-community/Qwen2.5-14B-Instruct-4bit",
-        name: "Qwen 2.5 14B Instruct",
-        size: "14B",
-        format: "MLX (Apple Silicon)",
-        description: "High-performance model bridging the gap between lightweight edge and server-class reasoning.",
-        ramNeeded: 11,
-        link: "https://huggingface.co/mlx-community/Qwen2.5-14B-Instruct-4bit"
-      },
-      {
-        repo_id: "mlx-community/Qwen2.5-32B-Instruct-4bit",
-        name: "Qwen 2.5 32B Instruct",
-        size: "32B",
-        format: "MLX (Apple Silicon)",
-        description: "Server-class reasoning capabilities, offering highly detailed responses and complex coding skills.",
-        ramNeeded: 24,
-        link: "https://huggingface.co/mlx-community/Qwen2.5-32B-Instruct-4bit"
-      },
-      {
-        repo_id: "mlx-community/Meta-Llama-3-70B-Instruct-4bit",
-        name: "Llama 3 70B Instruct",
-        size: "70B",
-        format: "MLX (Apple Silicon)",
-        description: "State-of-the-art open weight reasoning and comprehension model. Requires massive unified memory.",
-        ramNeeded: 42,
-        link: "https://huggingface.co/mlx-community/Meta-Llama-3-70B-Instruct-4bit"
-      },
-      {
-        repo_id: "mlx-community/Qwen2.5-72B-Instruct-4bit",
-        name: "Qwen 2.5 72B Instruct",
-        size: "72B",
-        format: "MLX (Apple Silicon)",
-        description: "Maximum reasoning performance for deep logic, complex coding, and specialized research.",
-        ramNeeded: 48,
-        link: "https://huggingface.co/mlx-community/Qwen2.5-72B-Instruct-4bit"
-      },
-      {
-        repo_id: "mlx-community/DeepSeek-V3-4bit",
-        name: "DeepSeek V3",
-        size: "671B (MoE)",
-        format: "MLX (Apple Silicon)",
-        description: "The current frontier for open-weights models. Massive mixture-of-experts architecture.",
-        ramNeeded: 380,
-        link: "https://huggingface.co/mlx-community/DeepSeek-V3-4bit"
-      },
-      {
-        repo_id: "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF",
-        name: "Llama 3 8B Instruct",
-        size: "8B",
-        format: "GGUF (Cross-platform)",
-        description: "Perfect for LM Studio integration on Windows/Linux with CUDA or CPU backend.",
-        ramNeeded: 6,
-        link: "https://huggingface.co/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
-      },
-      {
-        repo_id: "lmstudio-community/Mistral-7B-Instruct-v0.3-GGUF",
-        name: "Mistral 7B v0.3",
-        size: "7B",
-        format: "GGUF (Cross-platform)",
-        description: "Reliable and efficient 7B baseline. Excellent for general utility and summarization.",
-        ramNeeded: 5,
-        link: "https://huggingface.co/lmstudio-community/Mistral-7B-Instruct-v0.3-GGUF"
-      },
-      {
-        repo_id: "lmstudio-community/Phi-3.5-mini-instruct-GGUF",
-        name: "Phi 3.5 Mini",
-        size: "3.8B",
-        format: "GGUF (Cross-platform)",
-        description: "Highly efficient reasoning in a compact GGUF format for cross-platform hardware.",
-        ramNeeded: 3,
-        link: "https://huggingface.co/lmstudio-community/Phi-3.5-mini-instruct-GGUF"
-      },
-      {
-        repo_id: "lmstudio-community/Qwen2.5-7B-Instruct-GGUF",
-        name: "Qwen 2.5 7B Instruct",
-        size: "7B",
-        format: "GGUF (Cross-platform)",
-        description: "Outstanding multilingual capability. Runs extremely well on standard GPUs or CPU threads.",
-        ramNeeded: 5,
-        link: "https://huggingface.co/lmstudio-community/Qwen2.5-7B-Instruct-GGUF"
-      },
-      {
-        repo_id: "lmstudio-community/Llama-3.2-3B-Instruct-GGUF",
-        name: "Llama 3.2 3B Instruct",
-        size: "3B",
-        format: "GGUF (Cross-platform)",
-        description: "Highly optimized lightweight model. Runs smoothly on laptops with lower VRAM or RAM specs.",
-        ramNeeded: 3,
-        link: "https://huggingface.co/lmstudio-community/Llama-3.2-3B-Instruct-GGUF"
-      },
-      {
-        repo_id: "lmstudio-community/Qwen2.5-14B-Instruct-GGUF",
-        name: "Qwen 2.5 14B Instruct",
-        size: "14B",
-        format: "GGUF (Cross-platform)",
-        description: "Excellent model for detailed code generation and multi-step reasoning tasks.",
-        ramNeeded: 11,
-        link: "https://huggingface.co/lmstudio-community/Qwen2.5-14B-Instruct-GGUF"
-      },
-      {
-        repo_id: "bartowski/gemma-2-27b-it-GGUF",
-        name: "Gemma 2 27B IT",
-        size: "27B",
-        format: "GGUF (Cross-platform)",
-        description: "Google's high-efficiency model, punching way above its weight in reasoning tasks.",
-        ramNeeded: 18,
-        link: "https://huggingface.co/bartowski/gemma-2-27b-it-GGUF"
-      },
-      {
-        repo_id: "MaziyarPanahi/Llama-3.1-70B-Instruct-GGUF",
-        name: "Llama 3.1 70B Instruct",
-        size: "70B",
-        format: "GGUF (Cross-platform)",
-        description: "Massive reasoning model. Requires high-end multi-GPU setups or significant system RAM.",
-        ramNeeded: 42,
-        link: "https://huggingface.co/MaziyarPanahi/Llama-3.1-70B-Instruct-GGUF"
-      },
-      {
-        repo_id: "unsloth/Meta-Llama-3.1-405B-Instruct-GGUF-IQ4_XS",
-        name: "Llama 3.1 405B Instruct",
-        size: "405B",
-        format: "GGUF (Cross-platform)",
-        description: "The absolute frontier of open-weight LLMs. Requires multi-node server clusters to run efficiently.",
-        ramNeeded: 230,
-        link: "https://huggingface.co/unsloth/Meta-Llama-3.1-405B-Instruct-GGUF-IQ4_XS"
-      },
-      {
-        repo_id: "mlx-community/Mixtral-8x22B-Instruct-v0.1-4bit",
-        name: "Mixtral 8x22B Instruct",
-        size: "141B",
-        format: "MLX (Apple Silicon)",
-        description: "High-throughput Mixture-of-Experts model. Exceptional for large-scale reasoning and logic.",
-        ramNeeded: 82,
-        link: "https://huggingface.co/mlx-community/Mixtral-8x22B-Instruct-v0.1-4bit"
-      },
-      {
-        repo_id: "lmstudio-community/Command-R-Plus-GGUF",
-        name: "Cohere Command R+",
-        size: "104B",
-        format: "GGUF (Cross-platform)",
-        description: "Enterprise-grade model optimized for RAG and long-context tool use.",
-        ramNeeded: 64,
-        link: "https://huggingface.co/lmstudio-community/Command-R-Plus-GGUF"
-      },
-      {
-        repo_id: "mlx-community/grok-1-4bit",
-        name: "xAI Grok-1",
-        size: "314B",
-        format: "MLX (Apple Silicon)",
-        description: "Massive raw parameter count model. Designed for deep knowledge and unconventional reasoning.",
-        ramNeeded: 180,
-        link: "https://huggingface.co/mlx-community/grok-1-4bit"
-      }
-    ];
+    const allModels = recommendations;
 
     const processed = allModels.map(m => {
       const isMlx = m.format.includes("MLX");
@@ -932,12 +748,14 @@ export const ModelAnalysis = () => {
                           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
                         >
                           <div className="px-8 md:px-10 pb-10 flex flex-col gap-8 border-t border-white/5 pt-8">
-                            {!systemProfile ? (
-                              <div className="py-12 flex flex-col items-center justify-center gap-4">
-                                <RefreshCcw size={24} className="text-white/10 animate-spin" />
-                                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/20">Analyzing hardware constraints...</p>
-                              </div>
-                            ) : (
+                             {!systemProfile || loadingRecommendations ? (
+                               <div className="py-12 flex flex-col items-center justify-center gap-4">
+                                 <RefreshCcw size={24} className="text-white/10 animate-spin" />
+                                 <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/20">
+                                   {!systemProfile ? "Analyzing hardware constraints..." : "Fetching live recommendations..."}
+                                 </p>
+                               </div>
+                             ) : (
                               <div className="flex flex-col gap-6">
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                   <p className="text-xs text-white/30 leading-relaxed max-w-lg">

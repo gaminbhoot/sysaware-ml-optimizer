@@ -18,8 +18,8 @@ export default {
         border: 'var(--color-border-subtle)',
         'border-strong': 'var(--color-border-strong)',
         silver: 'var(--color-text-secondary)',
-        emerald: 'var(--color-accent-emerald)',
-        rose: 'var(--color-accent-rose)',
+        emerald: 'rgb(var(--color-accent-emerald-rgb) / <alpha-value>)',
+        rose: 'rgb(var(--color-accent-rose-rgb) / <alpha-value>)',
         muted: 'var(--color-text-muted)',
       },
       fontSize: {
