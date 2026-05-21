@@ -119,8 +119,8 @@ const ModelCard = ({ model, idx, systemProfile }: { model: any, idx: number, sys
             "h-full rounded-full",
             model.status === 'perfect' ? 'bg-emerald/60' : model.status === 'caution' ? 'bg-yellow-400/60' : 'bg-red-400/40'
           )}
-          initial={{ width: 0 }}
-          animate={{ width: `${Math.max(Math.min((model.ramNeeded / (systemProfile?.ram_gb || 8)) * 100, 100), 2)}%` }}
+          initial={{ width: "0%" }}
+          animate={{ width: `${Math.max(Math.min((model.ramNeeded / (parseFloat(systemProfile?.ram_gb) || 8)) * 100, 100), 5)}%` }}
           transition={{ duration: 1, delay: 0.3 + idx * 0.06 }}
         />
       </div>
@@ -413,8 +413,8 @@ export const ModelAnalysis = () => {
         if (a.formatMatch !== b.formatMatch) return b.formatMatch ? 1 : -1;
         return b.ramNeeded - a.ramNeeded; // Show bigger optimal models first
       }),
-      tight: processed.filter(m => m.status === 'caution').sort((a, b) => b.formatMatch ? 1 : -1),
-      heavy: processed.filter(m => m.status === 'incompatible').sort((a, b) => b.formatMatch ? 1 : -1)
+      tight: processed.filter(m => m.status === 'caution').sort((_, b) => b.formatMatch ? 1 : -1),
+      heavy: processed.filter(m => m.status === 'incompatible').sort((_, b) => b.formatMatch ? 1 : -1)
     };
   };
 
