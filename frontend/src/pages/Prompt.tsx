@@ -593,7 +593,7 @@ export const Prompts = () => {
                 <div className="p-2 bg-emerald/10 rounded-lg text-emerald">
                     <Sparkles size={16} />
                 </div>
-                <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-white">Laboratory</span>
+                <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-white">Prompt Enhancer</span>
             </div>
             {(!isSidebar) && (
                 <div className="flex items-center gap-4">
@@ -912,7 +912,12 @@ export const Prompts = () => {
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: 10 }}
-                          className="absolute right-0 mt-2.5 w-64 bg-black/90 border border-white/10 rounded-2xl p-2.5 shadow-2xl z-30 backdrop-blur-xl"
+                          className="absolute right-0 mt-2.5 w-64 border border-white/10 rounded-2xl p-2.5 shadow-2xl z-30"
+                          style={{ 
+                            backgroundColor: 'rgba(10, 10, 12, 0.95)',
+                            backdropFilter: 'blur(24px)', 
+                            WebkitBackdropFilter: 'blur(24px)' 
+                          }}
                         >
                           <div className="text-[9px] font-mono uppercase tracking-widest text-white/20 px-3 py-1.5 border-b border-white/5 mb-1.5">Available Models</div>
                           <div className="max-h-48 overflow-y-auto space-y-1 scrollbar-hide">
@@ -969,15 +974,14 @@ export const Prompts = () => {
                   <button
                     onClick={() => setIsLabSidebarOpen(!isLabSidebarOpen)}
                     className={cn(
-                      "flex items-center gap-2 px-4 py-2.5 rounded-2xl border text-xs font-mono uppercase tracking-wider transition-all",
+                      "p-2.5 rounded-2xl border transition-all",
                       isLabSidebarOpen 
                         ? "bg-emerald/10 text-emerald border-emerald/20 hover:bg-emerald/20" 
                         : "bg-white/5 text-white/40 border-white/5 hover:bg-white/10 hover:text-white"
                     )}
-                    title="Toggle Lab Drawer"
+                    title="Toggle Prompt Enhancer"
                   >
-                    <Sparkles size={14} />
-                    <span>Laboratory</span>
+                    <Sparkles size={16} />
                   </button>
                 </div>
               </div>
