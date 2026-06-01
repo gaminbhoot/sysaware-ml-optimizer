@@ -44,7 +44,7 @@ class LMStudioClient:
                 pass
         return []
 
-    def sync_loaded_model(self) -> Optional[Dict[str, Any]]:
+    def sync_loaded_model(self, model_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Detects loaded model in LM Studio and converts it to SysAware ModelAnalysis format.
         """
@@ -53,17 +53,36 @@ class LMStudioClient:
             print("LM Studio Client: No models found during sync.")
             return None
 
+        # Helper to check if a model object is loaded in LM Studio
+        def is_model_loaded(m):
+            is_loaded = m.get('loaded', False)
+            state = str(m.get('state', '')).lower()
+            instances = m.get('loaded_instances', [])
+            return is_loaded or state == 'loaded' or (isinstance(instances, list) and len(instances) > 0)
+
+        if model_id:
+            # Look for a specific model by ID
+            for model in models:
+                current_id = model.get('key') or model.get('id') or model.get('display_name')
+                instances = model.get('loaded_instances', [])
+                
+                # Check for ID match (key, id, name, or inside loaded_instances)
+                match = (current_id == model_id)
+                if not match and isinstance(instances, list):
+                    for inst in instances:
+                        if inst.get('id') == model_id:
+                            match = True
+                            break
+                            
+                if match and is_model_loaded(model):
+                    print(f"LM Studio Client: SUCCESS - Detected specific loaded model: {current_id}")
+                    return self._map_to_analysis(model)
+
+        # Fallback (or if no model_id was passed): find the first loaded model
         for model in models:
-            # Check multiple ways a model can be 'loaded'
-            is_loaded = model.get('loaded', False)
-            state = str(model.get('state', '')).lower()
-            instances = model.get('loaded_instances', [])
-            model_id = model.get('key') or model.get('id') or model.get('display_name')
-            
-            print(f"LM Studio Client: Checking model {model_id} - loaded: {is_loaded}, state: {state}, instances: {len(instances)}")
-            
-            if is_loaded or state == 'loaded' or (isinstance(instances, list) and len(instances) > 0):
-                print(f"LM Studio Client: SUCCESS - Detected loaded model: {model_id}")
+            current_id = model.get('key') or model.get('id') or model.get('display_name')
+            if is_model_loaded(model):
+                print(f"LM Studio Client: SUCCESS - Detected loaded model: {current_id}")
                 return self._map_to_analysis(model)
         
         # Fallback: If only one model exists in the whole system, it might be the loaded one
@@ -207,9 +226,18 @@ class LMStudioClient:
         size_mb = size_bytes / (1024 * 1024) if size_bytes else 0.0
         path = lm_model.get('path', '')
         
+        is_loaded = lm_model.get('loaded', False)
+        state = str(lm_model.get('state', '')).lower()
+        instances = lm_model.get('loaded_instances', [])
+        loaded_in_memory = is_loaded or state == 'loaded' or (isinstance(instances, list) and len(instances) > 0)
+        
+        # The base key of the model in LM Studio (stable across load states)
+        base_id = lm_model.get('key', lm_model.get('id', name))
+        
         return {
             "model_name": name,
             "model_id": model_id,
+            "base_id": base_id,
             "num_params": num_params,
             "trainable_params": 0,
             "size_mb": size_mb,
@@ -220,5 +248,6 @@ class LMStudioClient:
             },
             "is_external": True,
             "external_source": "LM Studio",
-            "path": path
+            "path": path,
+            "loaded": loaded_in_memory
         }

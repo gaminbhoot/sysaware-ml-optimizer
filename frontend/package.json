@@ -4,12 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "dev": "./node_modules/.bin/vite",
+    "test": "./node_modules/.bin/vitest run",
+    "test:watch": "./node_modules/.bin/vitest",
+    "build": "./node_modules/.bin/tsc -b && ./node_modules/.bin/vite build",
+    "lint": "./node_modules/.bin/eslint .",
+    "preview": "./node_modules/.bin/vite preview"
   },
   "dependencies": {
     "@react-three/fiber": "^9.6.1",

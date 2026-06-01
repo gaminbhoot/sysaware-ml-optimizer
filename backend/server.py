@@ -142,6 +142,7 @@ class DriftRequest(BaseModel):
 class LMStudioSyncRequest(BaseModel):
     host: str = "127.0.0.1"
     port: int = 1234
+    model_id: str | None = None
 
 class ModelLoadRequest(BaseModel):
     model_id: str
@@ -276,7 +277,7 @@ async def sync_lmstudio(req: LMStudioSyncRequest):
     print(f"Target: {req.host}:{req.port}")
     try:
         client = lms.LMStudioClient(host=req.host, port=req.port)
-        analysis = await anyio.to_thread.run_sync(client.sync_loaded_model)
+        analysis = await anyio.to_thread.run_sync(client.sync_loaded_model, req.model_id)
         if not analysis:
             print(f"Sync Result: FAIL - No active model detected.")
             raise HTTPException(status_code=404, detail=f"No loaded model found in LM Studio at {req.host}:{req.port}. Check if 'Local Server' is ON and a model is loaded.")
