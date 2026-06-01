@@ -12,3 +12,4 @@ psutil>=5.9.0
 joblib
 pandas
 scikit-learn
+httpx2
