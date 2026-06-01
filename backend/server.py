@@ -26,6 +26,7 @@ import core.autotuner as at
 import core.store as store
 import core.autodiscovery as discovery
 import core.lmstudio as lms
+import core.ollama as ollama
 import core.diagnostic as diag
 import core.tuner as tuner
 from main import load_model_from_path
@@ -153,6 +154,21 @@ class UnloadRequest(BaseModel):
     model_id: str | None = None
     host: str = "127.0.0.1"
     port: int = 1234
+
+class OllamaSyncRequest(BaseModel):
+    host: str = "127.0.0.1"
+    port: int = 11434
+    model_id: str | None = None
+
+class OllamaLoadRequest(BaseModel):
+    model_id: str
+    host: str = "127.0.0.1"
+    port: int = 11434
+
+class OllamaUnloadRequest(BaseModel):
+    model_id: str | None = None
+    host: str = "127.0.0.1"
+    port: int = 11434
 
 class DiagnosticRequest(BaseModel):
     model_path: str
@@ -325,6 +341,61 @@ async def unload_lmstudio_model(req: UnloadRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# --- Ollama Endpoints ---
+@app.post("/api/ollama/sync")
+async def sync_ollama(req: OllamaSyncRequest):
+    print(f"\n--- OLLAMA SYNC ATTEMPT ---")
+    print(f"Target: {req.host}:{req.port}")
+    try:
+        client = ollama.OllamaClient(host=req.host, port=req.port)
+        analysis = await anyio.to_thread.run_sync(client.sync_loaded_model, req.model_id)
+        if not analysis:
+            print(f"Sync Result: FAIL - No loaded model detected.")
+            raise HTTPException(status_code=404, detail=f"No loaded model found in Ollama at {req.host}:{req.port}. Check if Ollama is running and a model is loaded.")
+        print(f"Sync Result: SUCCESS - Active model: {analysis['model_name']}")
+        print(f"---------------------------\n")
+        return {"status": "success", "analysis": analysis}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            print(f"Sync Result: HTTP ERROR - {e.detail}")
+            raise e
+        print(f"Sync Result: UNEXPECTED ERROR - {str(e)}")
+        print(f"---------------------------\n")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/ollama/models")
+async def list_ollama_models(host: str = "127.0.0.1", port: int = 11434):
+    try:
+        client = ollama.OllamaClient(host=host, port=port)
+        models = await anyio.to_thread.run_sync(client.get_all_models)
+        return {"status": "success", "models": models}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/ollama/load")
+async def load_ollama_model(req: OllamaLoadRequest):
+    try:
+        client = ollama.OllamaClient(host=req.host, port=req.port)
+        success = await anyio.to_thread.run_sync(client.load_model, req.model_id)
+        if success:
+            return {"status": "success"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to load model in Ollama")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/ollama/unload")
+async def unload_ollama_model(req: OllamaUnloadRequest):
+    try:
+        client = ollama.OllamaClient(host=req.host, port=req.port)
+        success = await anyio.to_thread.run_sync(client.unload_model, req.model_id)
+        if success:
+            return {"status": "success"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to unload model in Ollama")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/fleet/active")
 async def get_active_nodes():
     try:
@@ -485,14 +556,19 @@ async def analyze_model_endpoint(req: AnalyzeRequest):
 @app.post("/api/model/unload")
 async def unload_model(req: UnloadRequest):
     try:
-        # If we have LM Studio info, try to unload there too
-        client = lms.LMStudioClient(host=req.host, port=req.port)
-        await anyio.to_thread.run_sync(client.unload_model, req.model_id)
-        return {"status": "success", "message": f"Model {req.model_id or ''} unloaded from memory"}
+        # If the port corresponds to Ollama, unload from Ollama
+        if req.port == 11434:
+            client = ollama.OllamaClient(host=req.host, port=req.port)
+            await anyio.to_thread.run_sync(client.unload_model, req.model_id)
+            return {"status": "success", "message": f"Model {req.model_id or ''} unloaded from Ollama memory"}
+        else:
+            # Otherwise default to LM Studio
+            client = lms.LMStudioClient(host=req.host, port=req.port)
+            await anyio.to_thread.run_sync(client.unload_model, req.model_id)
+            return {"status": "success", "message": f"Model {req.model_id or ''} unloaded from LM Studio memory"}
     except Exception as e:
-        # We don't want to fail the whole thing if LM Studio unload fails
-        print(f"Model Unload: LM Studio unload failed: {e}")
-        return {"status": "success", "message": "Model unloaded from local memory (LM Studio sync failed)"}
+        print(f"Model Unload failed: {e}")
+        return {"status": "success", "message": "Model unloaded from local memory (Client sync failed)"}
 
 @app.post("/api/optimize/baseline")
 async def estimate_baseline(req: BaselineRequest):
@@ -618,7 +694,10 @@ async def chat_stream(req: ChatRequest):
     Uses the provided host and port to connect to the active backend.
     """
     try:
-        client = lms.LMStudioClient(host=req.host, port=req.port)
+        if req.port == 11434:
+            client = ollama.OllamaClient(host=req.host, port=req.port)
+        else:
+            client = lms.LMStudioClient(host=req.host, port=req.port)
         messages = [{"role": m.role, "content": msg_content_filter(m.content)} for m in req.messages]
         
         async def event_generator():

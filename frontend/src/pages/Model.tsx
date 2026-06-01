@@ -153,6 +153,7 @@ export const ModelAnalysis = () => {
   const isClickLocked = useRef(false);
   const [unsafeLoad, setUnsafeLoad] = useState(false);
   const [activeMode, setActiveTabMode] = useState<'path' | 'lmstudio'>('path');
+  const [selectedClient, setSelectedClient] = useState<'lmstudio' | 'ollama'>('lmstudio');
   const [expandedPanel, setExpandedPanel] = useState<'selection' | 'recommendations'>('selection');
   const [hubTab, setHubTab] = useState<'inspect' | 'diagnose' | 'tune'>('inspect');
 
@@ -238,25 +239,31 @@ export const ModelAnalysis = () => {
 
   // --- Handlers ---
 
-  const fetchLMStudioModels = async () => {
+  const fetchClientModels = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/lmstudio/models?host=${lmStudioHost}&port=${lmStudioPort}`);
+      const clientPrefix = selectedClient === 'lmstudio' ? 'lmstudio' : 'ollama';
+      const res = await fetch(`/api/${clientPrefix}/models?host=${lmStudioHost}&port=${lmStudioPort}`);
       const data = await res.json();
       if (data.status === 'success') {
         setAvailableModels(data.models);
       }
     } catch (e: any) {
-      addNotification({ type: 'error', title: 'Fetch Failed', message: 'Could not list LM Studio models' });
+      addNotification({ 
+        type: 'error', 
+        title: 'Fetch Failed', 
+        message: `Could not list ${selectedClient === 'lmstudio' ? 'LM Studio' : 'Ollama'} models` 
+      });
     }
     setLoading(false);
   };
 
-  const loadLMStudioModel = async (modelId: string) => {
+  const loadClientModel = async (modelId: string) => {
     setLoadingModelId(modelId);
     setLoading(true);
     try {
-      const res = await fetch('/api/lmstudio/load', {
+      const clientPrefix = selectedClient === 'lmstudio' ? 'lmstudio' : 'ollama';
+      const res = await fetch(`/api/${clientPrefix}/load`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model_id: modelId, host: lmStudioHost, port: lmStudioPort })
@@ -264,8 +271,8 @@ export const ModelAnalysis = () => {
       const data = await res.json();
       if (data.status === 'success') {
         addNotification({ type: 'success', title: 'Model Loaded', message: `Model ${modelId} is now active` });
-        await syncLMStudio(modelId); // Sync metadata for this specific loaded model
-        await fetchLMStudioModels(); // Refresh downloaded models list to update loaded flags
+        await syncClient(modelId); // Sync metadata for this specific loaded model
+        await fetchClientModels(); // Refresh downloaded models list to update loaded flags
       } else {
         throw new Error(data.detail || 'Load failed');
       }
@@ -283,9 +290,9 @@ export const ModelAnalysis = () => {
     try {
       const modelIdentifier = model.model_id || model.model_name;
       if (model.loaded) {
-        await syncLMStudio(modelIdentifier);
+        await syncClient(modelIdentifier);
       } else {
-        await loadLMStudioModel(modelIdentifier);
+        await loadClientModel(modelIdentifier);
       }
     } finally {
       isClickLocked.current = false;
@@ -335,11 +342,12 @@ export const ModelAnalysis = () => {
     setLoading(false);
   };
 
-  const syncLMStudio = async (modelId?: string | any) => {
+  const syncClient = async (modelId?: string | any) => {
     const targetModelId = typeof modelId === 'string' ? modelId : undefined;
     setLoading(true);
     try {
-      const res = await fetch('/api/lmstudio/sync', {
+      const clientPrefix = selectedClient === 'lmstudio' ? 'lmstudio' : 'ollama';
+      const res = await fetch(`/api/${clientPrefix}/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ host: lmStudioHost, port: lmStudioPort, model_id: targetModelId })
@@ -350,12 +358,12 @@ export const ModelAnalysis = () => {
         if (data.analysis.path) setModelPath(data.analysis.path);
         addNotification({ 
           type: 'success', 
-          title: targetModelId ? 'Model Activated' : 'LM Studio Synced', 
+          title: targetModelId ? 'Model Activated' : 'Client Synced', 
           message: targetModelId 
             ? `Switched active model to: ${data.analysis.model_name}` 
             : `Connected to model: ${data.analysis.model_name}` 
         });
-        await fetchLMStudioModels(); // Refresh availableModels to update loaded flags
+        await fetchClientModels(); // Refresh availableModels to update loaded flags
       } else {
         throw new Error(data.detail || 'Connection failed');
       }
@@ -365,7 +373,7 @@ export const ModelAnalysis = () => {
         title: targetModelId ? 'Activation Failed' : 'Sync Failed', 
         message: targetModelId 
           ? (e.message || 'Could not switch active model')
-          : ('Ensure LM Studio local server is active at ' + lmStudioHost)
+          : (`Ensure ${selectedClient === 'lmstudio' ? 'LM Studio' : 'Ollama'} local server is active at ` + lmStudioHost)
       });
     }
     setLoading(false);
@@ -555,7 +563,7 @@ export const ModelAnalysis = () => {
                         </div>
                         <div>
                           <h3 className="text-xl font-light tracking-tight text-white">Model <span className="text-white/20 italic">Selection</span></h3>
-                          <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/30 mt-1">Ingest local assets or bridge LM Studio</p>
+                          <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/30 mt-1">Ingest local assets or bridge external client</p>
                         </div>
                       </div>
                       <div className={cn("transition-transform duration-500", expandedPanel === 'selection' ? "rotate-180 text-emerald" : "text-white/20")}>
@@ -590,7 +598,7 @@ export const ModelAnalysis = () => {
                                     activeMode === 'lmstudio' ? "bg-white/10 text-white border border-white/10" : "text-white/40 hover:text-white"
                                   )}
                                 >
-                                  <Link2 size={12} /> Bridge
+                                  <Link2 size={12} /> Client Bridge
                                 </button>
                             </div>
 
@@ -629,32 +637,54 @@ export const ModelAnalysis = () => {
                               </div>
                             ) : (
                               <div className="flex flex-col gap-4">
-                                <div className="flex justify-between items-center">
-                                  <label className="text-luxury-mono text-[10px] tracking-widest uppercase text-white/40">LM Studio Server Instance</label>
+                                <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+                                  <div className="flex flex-wrap items-center gap-3">
+                                    <div className="flex flex-col gap-1">
+                                      <label className="text-luxury-mono text-[9px] tracking-widest uppercase text-white/30">Client Backend</label>
+                                      <select
+                                        value={selectedClient}
+                                        onChange={(e) => {
+                                          const val = e.target.value as 'lmstudio' | 'ollama';
+                                          setSelectedClient(val);
+                                          setLmStudioPort(val === 'lmstudio' ? 1234 : 11434);
+                                        }}
+                                        className="bg-black/60 border border-white/5 rounded-xl px-3 py-1.5 text-xs font-mono text-white/80 focus:outline-none focus:border-emerald/30 focus:ring-1 focus:ring-emerald/20 transition-all cursor-pointer"
+                                      >
+                                        <option value="lmstudio">LM Studio</option>
+                                        <option value="ollama">Ollama</option>
+                                      </select>
+                                    </div>
+                                  </div>
                                   <button 
-                                    onClick={fetchLMStudioModels}
-                                    className="text-[10px] font-mono uppercase tracking-widest text-emerald hover:text-emerald/80 flex items-center gap-2 transition-colors"
+                                    onClick={fetchClientModels}
+                                    className="text-[10px] font-mono uppercase tracking-widest text-emerald hover:text-emerald/80 flex items-center gap-2 transition-colors self-end md:self-auto"
                                   >
                                     <RefreshCcw size={12} className={loading ? "animate-spin" : ""} /> Sync Library
                                   </button>
                                 </div>
-                                <div className="relative flex flex-col md:flex-row gap-4">
-                                  <div className="relative flex-1 group/input">
-                                    <input
-                                      type="text"
-                                      value={lmStudioHost}
-                                      onChange={(e) => setLmStudioHost(e.target.value)}
-                                      placeholder="127.0.0.1"
-                                      className="w-full bg-black/60 border border-white/5 rounded-2xl py-6 pl-14 pr-6 text-white font-mono text-sm focus:outline-none focus:border-white/20 focus:ring-1 focus:ring-emerald/20 transition-all placeholder:text-white/10"
-                                    />
-                                    <Globe className="absolute left-6 top-1/2 -translate-y-1/2 text-white/20 group-focus-within/input:text-emerald transition-colors" size={20} />
+                                <div className="relative flex flex-col md:flex-row gap-4 mt-2">
+                                  <div className="relative flex-1 group/input flex flex-col gap-1.5">
+                                    <label className="text-luxury-mono text-[10px] tracking-widest uppercase text-white/40">
+                                      {selectedClient === 'lmstudio' ? 'LM Studio' : 'Ollama'} Server Host
+                                    </label>
+                                    <div className="relative w-full">
+                                      <input
+                                        type="text"
+                                        value={lmStudioHost}
+                                        onChange={(e) => setLmStudioHost(e.target.value)}
+                                        placeholder="127.0.0.1"
+                                        className="w-full bg-black/60 border border-white/5 rounded-2xl py-6 pl-14 pr-6 text-white font-mono text-sm focus:outline-none focus:border-white/20 focus:ring-1 focus:ring-emerald/20 transition-all placeholder:text-white/10"
+                                      />
+                                      <Globe className="absolute left-6 top-1/2 -translate-y-1/2 text-white/20 group-focus-within/input:text-emerald transition-colors" size={20} />
+                                    </div>
                                   </div>
-                                  <div className="relative w-full md:w-32 group/input">
+                                  <div className="relative w-full md:w-32 group/input flex flex-col gap-1.5">
+                                    <label className="text-luxury-mono text-[10px] tracking-widest uppercase text-white/40">Port</label>
                                     <input
                                       type="number"
                                       value={lmStudioPort}
                                       onChange={(e) => setLmStudioPort(parseInt(e.target.value) || 0)}
-                                      placeholder="1234"
+                                      placeholder={selectedClient === 'lmstudio' ? "1234" : "11434"}
                                       className="w-full bg-black/60 border border-white/5 rounded-2xl py-6 px-6 text-white font-mono text-sm focus:outline-none focus:border-white/20 focus:ring-1 focus:ring-emerald/20 transition-all placeholder:text-white/10"
                                     />
                                   </div>
@@ -742,7 +772,7 @@ export const ModelAnalysis = () => {
                             <div className="flex flex-wrap gap-4 items-center justify-between pt-8 border-t border-white/5">
                               <div className="flex items-center gap-4">
                                 <button
-                                  onClick={activeMode === 'path' ? analyzeModel : syncLMStudio}
+                                  onClick={activeMode === 'path' ? analyzeModel : () => syncClient()}
                                   disabled={loading || (activeMode === 'path' ? !modelPath : !lmStudioHost)}
                                   className={cn(
                                     "group relative flex items-center justify-center gap-3 px-12 py-6 rounded-2xl font-mono text-[10px] uppercase tracking-[0.2em] overflow-hidden transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50",
