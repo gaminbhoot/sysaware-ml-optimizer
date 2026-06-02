@@ -876,7 +876,7 @@ export const ModelAnalysis = () => {
                                   </div>
                                 </div>
 
-                                <div className="flex flex-col gap-10">
+                                <div className="flex flex-col gap-10 max-h-[500px] overflow-y-auto pr-3">
                                   {/* Optimal Section */}
                                   {getHFRecommendations().optimal.length > 0 && (
                                     <div className="flex flex-col gap-4">
