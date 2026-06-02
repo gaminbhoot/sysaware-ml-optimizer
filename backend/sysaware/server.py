@@ -17,19 +17,19 @@ from huggingface_hub import HfApi
 # Ensure the backend directory is in sys.path
 sys.path.insert(0, str(Path(__file__).parent))
 
-import core.system_profiler as sp
-import core.model_analyzer as ma
-import core.estimator as est
-import core.strategy_engine as se
-import core.prompt_optimizer as po
-import core.autotuner as at
-import core.store as store
-import core.autodiscovery as discovery
-import core.lmstudio as lms
-import core.ollama as ollama
-import core.diagnostic as diag
-import core.tuner as tuner
-from main import load_model_from_path
+from .core import system_profiler as sp
+from .core import model_analyzer as ma
+from .core import estimator as est
+from .core import strategy_engine as se
+from .core import prompt_optimizer as po
+from .core import autotuner as at
+from .core import store as store
+from .core import autodiscovery as discovery
+from .core import lmstudio as lms
+from .core import ollama as ollama
+from .core import diagnostic as diag
+from .core import tuner as tuner
+from .cli import load_model_from_path
 
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager

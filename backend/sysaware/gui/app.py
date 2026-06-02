@@ -4,18 +4,19 @@ import sys
 import gc
 import torch
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from core.contracts import GOALS, GOAL_LABELS
-from core.system_profiler import get_system_profile
-from core.model_analyzer import analyze_model
-from core.prompt_optimizer import optimize_prompt
-from core.estimator import estimate_performance
-from core.strategy_engine import get_strategy
-from core.autotuner import autotune
-from main import load_model_from_path
+from sysaware.core.contracts import GOALS, GOAL_LABELS
+from sysaware.core.system_profiler import get_system_profile
+from sysaware.core.model_analyzer import analyze_model
+from sysaware.core.prompt_optimizer import optimize_prompt
+from sysaware.core.estimator import estimate_performance
+from sysaware.core.strategy_engine import get_strategy
+from sysaware.core.autotuner import autotune
+from sysaware.cli import load_model_from_path
 
-from gui.helpers import clear_pipeline_state, format_range, format_memory, format_gpu_name, has_required_inputs
+from sysaware.gui.helpers import clear_pipeline_state, format_range, format_memory, format_gpu_name, has_required_inputs
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(

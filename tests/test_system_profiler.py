@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import core.system_profiler as sp
+import sysaware.core.system_profiler as sp
 
 
 @pytest.fixture

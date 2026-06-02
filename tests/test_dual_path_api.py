@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from backend.server import app
+from sysaware.server import app
 import json
 import torch
 import torch.nn as nn

@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import core.autotuner as autotuner
+import sysaware.core.autotuner as autotuner
 
 
 class DummyModel:

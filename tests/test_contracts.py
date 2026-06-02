@@ -1,4 +1,4 @@
-from core.contracts import GOALS, GOAL_LABELS
+from sysaware.core.contracts import GOALS, GOAL_LABELS
 
 
 def test_goals_are_stable_and_ordered() -> None:

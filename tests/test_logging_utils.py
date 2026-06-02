@@ -1,6 +1,6 @@
 import logging
 
-from core.logging_utils import get_logger
+from sysaware.core.logging_utils import get_logger
 
 
 def test_get_logger_reuses_same_logger_instance() -> None:

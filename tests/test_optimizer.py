@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import core.optimizer as optimizer
+import sysaware.core.optimizer as optimizer
 
 
 class FakeQuantizableLinear:

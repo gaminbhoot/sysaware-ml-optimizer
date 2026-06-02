@@ -1,6 +1,6 @@
 import pytest
 
-from core.prompt_optimizer import (
+from sysaware.core.prompt_optimizer import (
     INTENT_HINTS,
     _has_constraints,
     _has_context,

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import core.estimator as estimator
+import sysaware.core.estimator as estimator
 
 
 class FakeParameter:
@@ -195,7 +195,7 @@ def test_estimate_performance_batch_size_rule_gpu_profile(monkeypatch: pytest.Mo
 def test_estimator_tracemalloc(monkeypatch: pytest.MonkeyPatch) -> None:
     import torch
     import torch.nn as nn
-    import core.estimator as estimator
+    import sysaware.core.estimator as estimator
     monkeypatch.setitem(sys.modules, "torch", torch)
     
     class ToyModel(nn.Module):
@@ -221,7 +221,7 @@ def test_estimator_dynamic_iterations(monkeypatch: pytest.MonkeyPatch) -> None:
     import torch
     import time
     import torch.nn as nn
-    import core.estimator as estimator
+    import sysaware.core.estimator as estimator
     monkeypatch.setitem(sys.modules, "torch", torch)
     
     class FastModel(nn.Module):

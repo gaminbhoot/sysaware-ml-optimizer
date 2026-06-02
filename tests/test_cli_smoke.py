@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-import main
+from sysaware import cli as main
 
 
 @pytest.fixture
@@ -99,8 +99,8 @@ def test_run_pipeline_executes_full_flow(monkeypatch: pytest.MonkeyPatch) -> Non
         yield {"status": "complete", "best_config": {"name": "fp16", "mode": "fp16", "metadata": {"method": "fp16"}, "goal": goal, "score": 5.0, "evaluated_candidates": 3}, "best_result": {"latency_range_ms": (5.0, 7.0), "memory_mb": 70.0, "confidence": "high", "method": "static+micro-benchmark"}}
         return ({"name": "fp16", "mode": "fp16", "metadata": {"method": "fp16"}, "goal": goal, "score": 5.0, "evaluated_candidates": 3}, {"model": "optimized"}, {"latency_range_ms": (5.0, 7.0), "memory_mb": 70.0, "confidence": "high", "method": "static+micro-benchmark"})
     
-    import core.autotuner
-    monkeypatch.setattr(core.autotuner, "autotune_generator", mock_autotune_generator)
+    import sysaware.core.autotuner as core_autotuner
+    monkeypatch.setattr(core_autotuner, "autotune_generator", mock_autotune_generator)
     monkeypatch.setattr(main, "optimize_prompt", lambda text, prompt_type: calls.append(f"prompt:{prompt_type}") or {"original_prompt": text, "optimized_prompt": text, "suggestions": ["ok"], "before_score": 10, "after_score": 80})
 
     args = main.parse_args([
@@ -134,8 +134,8 @@ def test_run_pipeline_requires_prompt_text_when_prompt_optimizer_enabled(monkeyp
         yield {"status": "complete", "best_config": {"name": "int8", "mode": "int8", "metadata": {}, "goal": goal, "score": 1.0, "evaluated_candidates": 3}, "best_result": {"latency_range_ms": (8.0, 9.0), "memory_mb": 50.0, "confidence": "high", "method": "int8"}}
         return ({"name": "int8", "mode": "int8", "metadata": {}, "goal": goal, "score": 1.0, "evaluated_candidates": 3}, {"model": "optimized"}, {"latency_range_ms": (8.0, 9.0), "memory_mb": 50.0, "confidence": "high", "method": "int8"})
 
-    import core.autotuner
-    monkeypatch.setattr(core.autotuner, "autotune_generator", mock_autotune_gen_error)
+    import sysaware.core.autotuner as core_autotuner
+    monkeypatch.setattr(core_autotuner, "autotune_generator", mock_autotune_gen_error)
 
     args = main.parse_args(["--model-path", "model.pt", "--optimize-prompt"])
     args.prompt_text = ""

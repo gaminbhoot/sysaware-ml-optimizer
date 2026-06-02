@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from core.validation import (
+from sysaware.core.validation import (
     ValidationError,
     require_fields,
     set_global_seed,

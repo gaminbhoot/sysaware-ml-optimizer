@@ -1,7 +1,7 @@
 import pytest
 
-import main as main_module
-from main import main, parse_args
+from sysaware import cli as main_module
+from sysaware.cli import main, parse_args
 
 
 def test_parse_args_with_required_model_path() -> None:

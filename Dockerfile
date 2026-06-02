@@ -20,9 +20,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend code
-COPY core/ ./core/
-COPY main.py .
-COPY server.py .
+COPY backend/sysaware/ ./sysaware/
 
 # Copy built frontend from Stage 1
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
@@ -34,4 +32,4 @@ EXPOSE 8000
 ENV PYTHONPATH=.
 
 # Run the server
-CMD ["python", "server.py"]
+CMD ["python", "-m", "sysaware.server"]

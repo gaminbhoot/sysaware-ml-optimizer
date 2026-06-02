@@ -2,7 +2,7 @@ from collections import OrderedDict
 
 import pytest
 
-from core.model_analyzer import analyze_model
+from sysaware.core.model_analyzer import analyze_model
 
 
 class FakeTensor:

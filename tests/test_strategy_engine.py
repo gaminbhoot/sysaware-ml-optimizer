@@ -1,6 +1,6 @@
 import pytest
 
-from core.strategy_engine import get_strategy
+from sysaware.core.strategy_engine import get_strategy
 
 
 @pytest.mark.parametrize(

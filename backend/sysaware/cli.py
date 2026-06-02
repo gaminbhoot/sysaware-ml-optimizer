@@ -12,22 +12,22 @@ from typing import Any
 # Ensure the backend directory is in sys.path for module discovery (especially for torch.load)
 sys.path.insert(0, str(Path(__file__).parent))
 
-from core.contracts import GOALS
-from core.estimator import estimate_performance
-from core.logging_utils import get_logger
-from core.model_analyzer import analyze_model
-from core.optimizer import optimize_model
-from core.prompt_optimizer import optimize_prompt
-from core.strategy_engine import get_strategy
-from core.system_profiler import get_system_profile
-from core.autotuner import autotune
-from core.validation import ValidationError, set_global_seed, validate_goal
-from core.utils import calculate_model_hash
-from core.memoization import get_cached_strategy, save_strategy_to_cache
-from core.autodiscovery import discover_server
-from core.tui import SysAwareTUI, render_final_table, Live, box
-from core.exporter import export_deployment_artifacts
-from core.simulator import simulate_performance, VIRTUAL_HARDWARE
+from .core.contracts import GOALS
+from .core.estimator import estimate_performance
+from .core.logging_utils import get_logger
+from .core.model_analyzer import analyze_model
+from .core.optimizer import optimize_model
+from .core.prompt_optimizer import optimize_prompt
+from .core.strategy_engine import get_strategy
+from .core.system_profiler import get_system_profile
+from .core.autotuner import autotune
+from .core.validation import ValidationError, set_global_seed, validate_goal
+from .core.utils import calculate_model_hash
+from .core.memoization import get_cached_strategy, save_strategy_to_cache
+from .core.autodiscovery import discover_server
+from .core.tui import SysAwareTUI, render_final_table, Live, box
+from .core.exporter import export_deployment_artifacts
+from .core.simulator import simulate_performance, VIRTUAL_HARDWARE
 
 
 logger = get_logger("sysaware.cli")
@@ -340,7 +340,7 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
 	server_url = args.server
 	
 	# Start TUI Live View
-	from core.tui import Console
+	from .core.tui import Console
 	live_console = Console(file=sys.stderr) if getattr(args, "json", False) else None
 	with Live(tui.layout, refresh_per_second=4, screen=not args.json, console=live_console):
 		# Autodiscovery logic
@@ -382,7 +382,7 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
 		tui.update_progress()
 		best_config, best_model, best_result = None, None, None
 		try:
-			from core.autotuner import autotune_generator
+			from .core.autotuner import autotune_generator
 			gen = autotune_generator(model, system_profile, goal, blacklist=blacklist)
 			while True:
 				try:
@@ -459,16 +459,16 @@ def main(argv: list[str] | None = None) -> int:
 		deploy_path = export_deployment_artifacts(report)
 		logger.info(f"Deployment artifacts generated at: {deploy_path}")
 		if not args.json:
-			from core.tui import Panel
-			from core.tui import console
+			from .core.tui import Panel
+			from .core.tui import console
 			console.print(Panel(f"[bold green]✓ Deployment Artifacts Exported[/]\\nLocation: [cyan]{deploy_path}[/]", title="Export-to-Deploy", border_style="green"))
 
 	if args.simulate:
 		sim_report = simulate_performance(report, args.simulate)
 		if sim_report and not args.json:
-			from core.tui import Table
-			from core.tui import Panel
-			from core.tui import console
+			from .core.tui import Table
+			from .core.tui import Panel
+			from .core.tui import console
 			
 			table = Table(title=f"[bold yellow]Virtual Simulation: {sim_report['target_hardware']}[/]", box=box.ROUNDED)
 			table.add_column("Metric", style="dim")
