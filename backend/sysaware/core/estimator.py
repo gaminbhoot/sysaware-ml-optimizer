@@ -229,17 +229,20 @@ def _run_micro_benchmark(model: Any, profile: dict[str, Any]) -> tuple[tuple[flo
 import joblib
 import os
 import pandas as pd
+import warnings
 
 def predict_inference_speed(hardware_specs: dict, model_metadata: dict) -> dict:
     """Predicts tok/s using trained regression models."""
     # Load models and metadata on demand
     try:
-        estimator_invram = joblib.load("data/estimator_invram.joblib")
-        estimator_metadata = joblib.load("data/estimator_metadata.joblib")
-        # Try to load spill model if it exists
-        estimator_spill = None
-        if os.path.exists("data/estimator_ramspill.joblib"):
-            estimator_spill = joblib.load("data/estimator_ramspill.joblib")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            estimator_invram = joblib.load("data/estimator_invram.joblib")
+            estimator_metadata = joblib.load("data/estimator_metadata.joblib")
+            # Try to load spill model if it exists
+            estimator_spill = None
+            if os.path.exists("data/estimator_ramspill.joblib"):
+                estimator_spill = joblib.load("data/estimator_ramspill.joblib")
     except:
         return {"error": "Estimator model not loaded", "predicted_tok_s": 0.0}
 
