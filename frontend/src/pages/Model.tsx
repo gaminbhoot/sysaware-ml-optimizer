@@ -154,7 +154,7 @@ export const ModelAnalysis = () => {
   const [unsafeLoad, setUnsafeLoad] = useState(false);
   const [activeMode, setActiveTabMode] = useState<'path' | 'lmstudio'>('path');
   const [selectedClient, setSelectedClient] = useState<'lmstudio' | 'ollama'>('lmstudio');
-  const [expandedPanel, setExpandedPanel] = useState<'selection' | 'recommendations'>('selection');
+  const [expandedPanel, setExpandedPanel] = useState<'selection' | 'recommendations' | null>('selection');
   const [hubTab, setHubTab] = useState<'inspect' | 'diagnose' | 'tune'>('inspect');
 
   const [recommendations, setRecommendations] = useState<any[]>([]);
@@ -551,7 +551,7 @@ export const ModelAnalysis = () => {
                     expandedPanel === 'selection' ? "border-emerald/20 shadow-[0_0_60px_rgba(16,185,129,0.03)]" : "border-white/5 opacity-60 hover:opacity-100"
                   )}>
                     <button 
-                      onClick={() => setExpandedPanel('selection')}
+                      onClick={() => setExpandedPanel(prev => prev === 'selection' ? null : 'selection')}
                       className="w-full flex items-center justify-between p-6 md:p-8 text-left focus:outline-none group"
                     >
                       <div className="flex items-center gap-6">
@@ -822,7 +822,7 @@ export const ModelAnalysis = () => {
                     expandedPanel === 'recommendations' ? "border-silver/20 shadow-[0_0_60px_rgba(255,255,255,0.02)]" : "border-white/5 opacity-60 hover:opacity-100"
                   )}>
                     <button 
-                      onClick={() => setExpandedPanel('recommendations')}
+                      onClick={() => setExpandedPanel(prev => prev === 'recommendations' ? null : 'recommendations')}
                       className="w-full flex items-center justify-between p-8 md:p-10 text-left focus:outline-none group"
                     >
                       <div className="flex items-center gap-6">
