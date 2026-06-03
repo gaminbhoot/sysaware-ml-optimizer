@@ -46,7 +46,7 @@ export const Profiler = () => {
   }, []);
 
   return (
-    <div className="p-6 md:p-12 lg:p-24 max-w-[1600px] mx-auto w-full h-full flex flex-col">
+    <div className="pt-10 pb-24 px-6 md:pt-14 md:pb-12 md:px-12 max-w-[1600px] mx-auto w-full h-full flex flex-col">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 md:mb-16 gap-6">
         <motion.div
           initial={{ opacity: 0, x: -20 }}

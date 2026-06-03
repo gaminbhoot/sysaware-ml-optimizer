@@ -173,7 +173,7 @@ export const Optimizer = () => {
   const isReady = !!systemProfile && !!modelPath;
 
   return (
-    <div className="p-6 md:p-12 lg:p-24 max-w-[1600px] mx-auto w-full h-full flex flex-col">
+    <div className="pt-10 pb-24 px-6 md:pt-14 md:pb-12 md:px-12 max-w-[1600px] mx-auto w-full h-full flex flex-col">
       <motion.div
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}

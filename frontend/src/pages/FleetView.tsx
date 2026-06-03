@@ -306,7 +306,7 @@ export const FleetView = () => {
   }, [addNotification, fetchData]);
 
   return (
-    <div className="min-h-screen bg-background p-6 md:p-12 relative">
+    <div className="min-h-screen bg-background pt-10 pb-24 px-6 md:pt-14 md:pb-12 md:px-12 relative">
       {/* Join Request Modal */}
       <AnimatePresence>
         {pendingNode && (

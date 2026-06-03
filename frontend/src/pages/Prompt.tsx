@@ -717,7 +717,7 @@ export const Prompts = () => {
       </div>
 
       {/* Unified Header */}
-      <div className="relative z-10 pt-24 pb-4 md:pt-32 md:pb-6 px-6 md:px-12 max-w-[1800px] mx-auto w-full flex-shrink-0">
+      <div className="relative z-10 pt-10 pb-4 md:pt-14 md:pb-6 px-6 md:px-12 max-w-[1800px] mx-auto w-full flex-shrink-0">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-4xl md:text-6xl font-light tracking-tighter mb-1">
