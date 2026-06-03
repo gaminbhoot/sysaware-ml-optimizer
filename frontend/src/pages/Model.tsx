@@ -471,7 +471,7 @@ export const ModelAnalysis = () => {
         <div className="absolute bottom-[-10%] left-[-10%] w-[30vw] h-[30vw] bg-silver/5 blur-[100px] rounded-full" />
       </div>
 
-      <div className="relative z-10 pt-24 pb-32 md:pt-32 md:pb-12 px-6 md:px-12 max-w-[1600px] mx-auto w-full flex flex-col gap-8 md:gap-12">
+      <div className="relative z-10 pt-10 pb-24 md:pt-14 md:pb-12 px-6 md:px-12 max-w-[1600px] mx-auto w-full flex flex-col gap-8 md:gap-12">
         {/* Header Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -552,7 +552,7 @@ export const ModelAnalysis = () => {
                   )}>
                     <button 
                       onClick={() => setExpandedPanel('selection')}
-                      className="w-full flex items-center justify-between p-8 md:p-10 text-left focus:outline-none group"
+                      className="w-full flex items-center justify-between p-6 md:p-8 text-left focus:outline-none group"
                     >
                       <div className="flex items-center gap-6">
                         <div className={cn(
@@ -562,7 +562,7 @@ export const ModelAnalysis = () => {
                           <Database size={24} />
                         </div>
                         <div>
-                          <h3 className="text-xl font-light tracking-tight text-white">Model <span className="text-white/20 italic">Selection</span></h3>
+                          <h3 className="text-lg font-light tracking-tight text-white">Model <span className="text-white/20 italic">Selection</span></h3>
                           <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/30 mt-1">Ingest local assets or bridge external client</p>
                         </div>
                       </div>
@@ -579,13 +579,15 @@ export const ModelAnalysis = () => {
                           exit={{ height: 0, opacity: 0 }}
                           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
                         >
-                          <div className="px-8 md:px-10 pb-10 flex flex-col gap-8 border-t border-white/5 pt-8">
-                            {/* Inner Tabs: Path vs LM Studio */}
-                            <div className="flex p-1 bg-white/[0.03] rounded-xl gap-1 max-w-md">
+                          <div className="px-6 md:px-8 pb-8 pt-6 flex flex-col gap-6 border-t border-white/5">
+                            {/* Inner Tabs & Actions */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                              {/* Inner Tabs: Path vs LM Studio */}
+                              <div className="flex p-1 bg-white/[0.03] rounded-xl gap-1 w-full sm:max-w-xs md:max-w-md">
                                 <button 
                                   onClick={() => setActiveTabMode('path')}
                                   className={cn(
-                                    "flex-1 flex items-center justify-center gap-3 py-3 rounded-lg font-mono text-[9px] uppercase tracking-widest transition-all",
+                                    "flex-1 flex items-center justify-center gap-3 py-2.5 rounded-lg font-mono text-[9px] uppercase tracking-widest transition-all",
                                     activeMode === 'path' ? "bg-white/10 text-white border border-white/10" : "text-white/40 hover:text-white"
                                   )}
                                 >
@@ -594,27 +596,59 @@ export const ModelAnalysis = () => {
                                 <button 
                                   onClick={() => setActiveTabMode('lmstudio')}
                                   className={cn(
-                                    "flex-1 flex items-center justify-center gap-3 py-3 rounded-lg font-mono text-[9px] uppercase tracking-widest transition-all",
+                                    "flex-1 flex items-center justify-center gap-3 py-2.5 rounded-lg font-mono text-[9px] uppercase tracking-widest transition-all",
                                     activeMode === 'lmstudio' ? "bg-white/10 text-white border border-white/10" : "text-white/40 hover:text-white"
                                   )}
                                 >
                                   <Link2 size={12} /> Client Bridge
                                 </button>
+                              </div>
+
+                              {/* Tab Actions */}
+                              <div className="flex items-center gap-2 self-end sm:self-auto">
+                                <button
+                                  onClick={activeMode === 'path' ? analyzeModel : () => syncClient()}
+                                  disabled={loading || (activeMode === 'path' ? !modelPath : !lmStudioHost)}
+                                  className={cn(
+                                    "group relative flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-mono text-[9px] uppercase tracking-[0.15em] overflow-hidden transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 h-10",
+                                    activeMode === 'path' ? "bg-white text-black" : "bg-emerald text-black"
+                                  )}
+                                >
+                                  {loading ? (
+                                    <div className="w-3.5 h-3.5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                                  ) : (
+                                    <>
+                                      {activeMode === 'path' ? <Search size={14} /> : <RefreshCcw size={14} className="group-hover:rotate-180 transition-transform duration-500" />}
+                                      <span>{activeMode === 'path' ? 'Inspect Model' : 'Sync Active Model'}</span>
+                                    </>
+                                  )}
+                                </button>
+
+                                {modelAnalysis && (
+                                  <button
+                                    onClick={unloadModel}
+                                    className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all border border-red-500/20 h-10 w-10 flex items-center justify-center"
+                                    title="Unload Model"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                )}
+                              </div>
                             </div>
 
                             {activeMode === 'path' ? (
-                              <div className="flex flex-col gap-4">
-                                <label className="text-luxury-mono text-[10px] tracking-widest uppercase text-white/40">Model Filesystem Path</label>
-                                <div className="relative flex flex-col md:flex-row gap-4">
+                              <div className="flex flex-col gap-3">
+                                <label className="text-luxury-mono text-[9px] tracking-widest uppercase text-white/40">Model Filesystem Path</label>
+                                <div className="relative flex items-center gap-3">
                                   <div className="relative flex-1 group/input">
                                     <input
                                       type="text"
                                       value={modelPath}
                                       onChange={(e) => setModelPath(e.target.value)}
                                       placeholder="/Volumes/Storage/Models/llama-3-8b.safetensors"
-                                      className="w-full bg-black/60 border border-white/5 rounded-2xl py-6 pl-14 pr-6 text-white font-mono text-sm focus:outline-none focus:border-white/20 focus:ring-1 focus:ring-emerald/20 transition-all placeholder:text-white/10"
+                                      className="w-full bg-black/40 border border-white/5 rounded-xl py-3 pl-11 pr-4 text-white font-mono text-xs focus:outline-none focus:border-emerald/40 focus:ring-1 focus:ring-emerald/10 transition-all placeholder:text-white/20 h-10"
                                     />
-                                    <Database className="absolute left-6 top-1/2 -translate-y-1/2 text-white/20 group-focus-within/input:text-emerald transition-colors" size={20} />
+                                    <Database className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 group-focus-within/input:text-emerald transition-colors" size={16} />
                                   </div>
                                   <button
                                     onClick={async () => {
@@ -628,44 +662,37 @@ export const ModelAnalysis = () => {
                                         console.error('Browse failed', e);
                                       }
                                     }}
-                                    className="flex items-center justify-center gap-3 px-10 py-6 rounded-2xl bg-white/5 border border-white/10 text-white font-mono text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all active:scale-95 shadow-xl"
+                                    className="flex items-center justify-center gap-2 px-5 rounded-xl bg-white/5 border border-white/10 text-white font-mono text-[9px] uppercase tracking-widest hover:bg-white/10 hover:border-white/20 transition-all active:scale-95 h-10"
                                   >
-                                    <FolderOpen size={16} />
+                                    <FolderOpen size={14} />
                                     Browse
                                   </button>
                                 </div>
                               </div>
                             ) : (
                               <div className="flex flex-col gap-4">
-                                <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-                                  <div className="flex flex-wrap items-center gap-3">
-                                    <div className="flex flex-col gap-1">
-                                      <label className="text-luxury-mono text-[9px] tracking-widest uppercase text-white/30">Client Backend</label>
-                                      <select
-                                        value={selectedClient}
-                                        onChange={(e) => {
-                                          const val = e.target.value as 'lmstudio' | 'ollama';
-                                          setSelectedClient(val);
-                                          setLmStudioPort(val === 'lmstudio' ? 1234 : 11434);
-                                        }}
-                                        className="bg-black/60 border border-white/5 rounded-xl px-3 py-1.5 text-xs font-mono text-white/80 focus:outline-none focus:border-emerald/30 focus:ring-1 focus:ring-emerald/20 transition-all cursor-pointer"
-                                      >
-                                        <option value="lmstudio">LM Studio</option>
-                                        <option value="ollama">Ollama</option>
-                                      </select>
-                                    </div>
+                                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                                  {/* Client Backend */}
+                                  <div className="md:col-span-3 flex flex-col gap-1.5">
+                                    <label className="text-luxury-mono text-[9px] tracking-widest uppercase text-white/30">Client Backend</label>
+                                    <select
+                                      value={selectedClient}
+                                      onChange={(e) => {
+                                        const val = e.target.value as 'lmstudio' | 'ollama';
+                                        setSelectedClient(val);
+                                        setLmStudioPort(val === 'lmstudio' ? 1234 : 11434);
+                                      }}
+                                      className="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-xs font-mono text-white/80 focus:outline-none focus:border-emerald/40 focus:ring-1 focus:ring-emerald/10 transition-all cursor-pointer h-10"
+                                    >
+                                      <option value="lmstudio">LM Studio</option>
+                                      <option value="ollama">Ollama</option>
+                                    </select>
                                   </div>
-                                  <button 
-                                    onClick={fetchClientModels}
-                                    className="text-[10px] font-mono uppercase tracking-widest text-emerald hover:text-emerald/80 flex items-center gap-2 transition-colors self-end md:self-auto"
-                                  >
-                                    <RefreshCcw size={12} className={loading ? "animate-spin" : ""} /> Sync Library
-                                  </button>
-                                </div>
-                                <div className="relative flex flex-col md:flex-row gap-4 mt-2">
-                                  <div className="relative flex-1 group/input flex flex-col gap-1.5">
-                                    <label className="text-luxury-mono text-[10px] tracking-widest uppercase text-white/40">
-                                      {selectedClient === 'lmstudio' ? 'LM Studio' : 'Ollama'} Server Host
+
+                                  {/* Server Host */}
+                                  <div className="md:col-span-5 flex flex-col gap-1.5 group/input">
+                                    <label className="text-luxury-mono text-[9px] tracking-widest uppercase text-white/30">
+                                      {selectedClient === 'lmstudio' ? 'LM Studio' : 'Ollama'} Host
                                     </label>
                                     <div className="relative w-full">
                                       <input
@@ -673,20 +700,32 @@ export const ModelAnalysis = () => {
                                         value={lmStudioHost}
                                         onChange={(e) => setLmStudioHost(e.target.value)}
                                         placeholder="127.0.0.1"
-                                        className="w-full bg-black/60 border border-white/5 rounded-2xl py-6 pl-14 pr-6 text-white font-mono text-sm focus:outline-none focus:border-white/20 focus:ring-1 focus:ring-emerald/20 transition-all placeholder:text-white/10"
+                                        className="w-full bg-black/40 border border-white/5 rounded-xl py-2.5 pl-10 pr-4 text-white font-mono text-xs focus:outline-none focus:border-emerald/40 focus:ring-1 focus:ring-emerald/10 transition-all placeholder:text-white/20 h-10"
                                       />
-                                      <Globe className="absolute left-6 top-1/2 -translate-y-1/2 text-white/20 group-focus-within/input:text-emerald transition-colors" size={20} />
+                                      <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/20 group-focus-within/input:text-emerald transition-colors" size={14} />
                                     </div>
                                   </div>
-                                  <div className="relative w-full md:w-32 group/input flex flex-col gap-1.5">
-                                    <label className="text-luxury-mono text-[10px] tracking-widest uppercase text-white/40">Port</label>
+
+                                  {/* Port */}
+                                  <div className="md:col-span-2 flex flex-col gap-1.5">
+                                    <label className="text-luxury-mono text-[9px] tracking-widest uppercase text-white/30">Port</label>
                                     <input
                                       type="number"
                                       value={lmStudioPort}
                                       onChange={(e) => setLmStudioPort(parseInt(e.target.value) || 0)}
                                       placeholder={selectedClient === 'lmstudio' ? "1234" : "11434"}
-                                      className="w-full bg-black/60 border border-white/5 rounded-2xl py-6 px-6 text-white font-mono text-sm focus:outline-none focus:border-white/20 focus:ring-1 focus:ring-emerald/20 transition-all placeholder:text-white/10"
+                                      className="w-full bg-black/40 border border-white/5 rounded-xl py-2.5 px-4 text-white font-mono text-xs focus:outline-none focus:border-emerald/40 focus:ring-1 focus:ring-emerald/10 transition-all placeholder:text-white/20 h-10"
                                     />
+                                  </div>
+
+                                  {/* Sync Library */}
+                                  <div className="md:col-span-2">
+                                    <button 
+                                      onClick={fetchClientModels}
+                                      className="w-full h-10 flex items-center justify-center gap-2 px-3 rounded-xl bg-emerald/10 border border-emerald/20 text-emerald font-mono text-[9px] uppercase tracking-widest hover:bg-emerald/15 hover:border-emerald/30 active:scale-95 transition-all"
+                                    >
+                                      <RefreshCcw size={12} className={loading ? "animate-spin" : ""} /> Sync
+                                    </button>
                                   </div>
                                 </div>
 
@@ -697,10 +736,13 @@ export const ModelAnalysis = () => {
                                       initial={{ opacity: 0, height: 0 }}
                                       animate={{ opacity: 1, height: 'auto' }}
                                       exit={{ opacity: 0, height: 0 }}
-                                      className="mt-6 flex flex-col gap-3 overflow-hidden"
+                                      className="mt-4 flex flex-col gap-2 overflow-hidden"
                                     >
-                                      <label className="text-luxury-mono text-[9px] tracking-widest uppercase text-white/20 mb-2">Downloaded Models</label>
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <label className="text-luxury-mono text-[9px] tracking-widest uppercase text-white/20">Downloaded Models</label>
+                                        <span className="text-[9px] font-mono text-white/20">{availableModels.length} found</span>
+                                      </div>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[190px] overflow-y-auto pr-1">
                                         {availableModels.map((model) => {
                                           const modelIdentifier = model.model_id || model.model_name;
                                           const isActive = !!modelAnalysis && (
@@ -718,24 +760,24 @@ export const ModelAnalysis = () => {
 
                                           if (isActive) {
                                             cardStyle = "bg-emerald/10 border-emerald/40 text-emerald shadow-[0_0_15px_rgba(16,185,129,0.15)]";
-                                            Badge = <span className="px-2 py-0.5 rounded bg-emerald/20 text-emerald text-[8px] font-mono tracking-wider uppercase font-bold">Active</span>;
-                                            RightIcon = <CheckCircle2 size={14} className="flex-shrink-0" />;
+                                            Badge = <span className="px-1.5 py-0.5 rounded bg-emerald/20 text-emerald text-[8px] font-mono tracking-wider uppercase font-bold">Active</span>;
+                                            RightIcon = <CheckCircle2 size={12} className="flex-shrink-0" />;
                                           } else if (isThisModelLoading) {
                                             cardStyle = "bg-white/[0.02] border-white/20 text-white/80 animate-pulse cursor-wait";
-                                            Badge = <span className="px-2 py-0.5 rounded bg-white/10 text-white/60 text-[8px] font-mono tracking-wider uppercase">Loading...</span>;
-                                            RightIcon = <RefreshCcw size={14} className="animate-spin text-white/40 flex-shrink-0" />;
+                                            Badge = <span className="px-1.5 py-0.5 rounded bg-white/10 text-white/60 text-[8px] font-mono tracking-wider uppercase">Loading...</span>;
+                                            RightIcon = <RefreshCcw size={12} className="animate-spin text-white/40 flex-shrink-0" />;
                                           } else if (isLoaded) {
                                             cardStyle = "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:border-blue-500/50 hover:bg-blue-500/15";
-                                            Badge = <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 text-[8px] font-mono tracking-wider uppercase">Loaded</span>;
+                                            Badge = <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 text-[8px] font-mono tracking-wider uppercase">Loaded</span>;
                                             RightIcon = (
                                               <div className="flex items-center gap-1.5">
-                                                <Database size={14} className="text-blue-500 flex-shrink-0 group-hover:scale-110 transition-transform" />
+                                                <Database size={12} className="text-blue-500 flex-shrink-0 group-hover:scale-110 transition-transform" />
                                                 <span className="text-[8px] font-mono tracking-wider uppercase opacity-0 group-hover:opacity-100 transition-opacity bg-blue-500/20 px-1 py-0.5 rounded text-blue-300">Activate</span>
                                               </div>
                                             );
                                           } else {
                                             cardStyle = "bg-white/[0.02] border-white/5 text-white/60 hover:border-white/20 hover:bg-white/[0.05] hover:text-white/80";
-                                            RightIcon = <Zap size={14} className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-white/40" />;
+                                            RightIcon = <Zap size={12} className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-white/40" />;
                                           }
 
                                           return (
@@ -744,15 +786,15 @@ export const ModelAnalysis = () => {
                                               onClick={() => !isActive && !isDisabled && handleModelClick(model)}
                                               disabled={isDisabled}
                                               className={cn(
-                                                "p-4 rounded-xl border text-left transition-all group flex items-center justify-between",
+                                                "p-3 rounded-lg border text-left transition-all group flex items-center justify-between",
                                                 cardStyle,
                                                 isDisabled && "opacity-40 cursor-not-allowed pointer-events-none"
                                               )}
                                             >
-                                              <div className="flex flex-col gap-1 overflow-hidden">
-                                                <span className="text-[11px] font-medium truncate">{model.model_name}</span>
-                                                <div className="flex items-center gap-2">
-                                                  <span className="text-[9px] font-mono opacity-40 uppercase">
+                                              <div className="flex flex-col gap-0.5 overflow-hidden">
+                                                <span className="text-[10px] font-medium truncate">{model.model_name}</span>
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="text-[8px] font-mono opacity-40 uppercase">
                                                     {model.num_params ? `${(model.num_params / 1e9).toFixed(1)}B Params` : '0.0B Params'}
                                                   </span>
                                                   {Badge}
@@ -768,38 +810,6 @@ export const ModelAnalysis = () => {
                                 </AnimatePresence>
                               </div>
                             )}
-
-                            <div className="flex flex-wrap gap-4 items-center justify-between pt-8 border-t border-white/5">
-                              <div className="flex items-center gap-4">
-                                <button
-                                  onClick={activeMode === 'path' ? analyzeModel : () => syncClient()}
-                                  disabled={loading || (activeMode === 'path' ? !modelPath : !lmStudioHost)}
-                                  className={cn(
-                                    "group relative flex items-center justify-center gap-3 px-12 py-6 rounded-2xl font-mono text-[10px] uppercase tracking-[0.2em] overflow-hidden transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50",
-                                    activeMode === 'path' ? "bg-white text-black" : "bg-emerald text-black"
-                                  )}
-                                >
-                                  {loading ? (
-                                    <div className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full animate-spin" />
-                                  ) : (
-                                    <>
-                                      {activeMode === 'path' ? <Search size={16} /> : <RefreshCcw size={16} className="group-hover:rotate-180 transition-transform duration-500" />}
-                                      <span>{activeMode === 'path' ? 'Inspect Model' : 'Sync Active Model'}</span>
-                                    </>
-                                  )}
-                                </button>
-
-                                {modelAnalysis && (
-                                  <button
-                                    onClick={unloadModel}
-                                    className="p-6 rounded-2xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all border border-red-500/20"
-                                    title="Unload Model"
-                                  >
-                                    <Trash2 size={20} />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
                           </div>
                         </motion.div>
                       )}
