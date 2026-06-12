@@ -1,4 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
+
+async function loadMockModel(page: Page) {
+  await page.locator('input[placeholder*="safetensors"]').fill('temp_model.pt');
+  await page.getByRole('button', { name: 'Inspect Model' }).click();
+  await expect(page.getByText('Total Parameters')).toBeVisible({ timeout: 10000 });
+}
 
 test.describe('Model Hub Functional Validation', () => {
   test.beforeEach(async ({ page }) => {
@@ -21,11 +27,7 @@ test.describe('Model Hub Functional Validation', () => {
 
   test('diagnostic path should run successfully with mock model', async ({ page }) => {
     // 1. Load a model first
-    await page.locator('input[placeholder*="safetensors"]').fill('temp_model.pt');
-    await page.getByRole('button', { name: 'Inspect Model' }).click();
-    
-    // Wait for analysis to complete
-    await expect(page.getByText('Total Parameters')).toBeVisible({ timeout: 10000 });
+    await loadMockModel(page);
 
     // 2. Go to Diagnostic
     await page.getByRole('button', { name: 'Diagnostic' }).click();
@@ -42,9 +44,7 @@ test.describe('Model Hub Functional Validation', () => {
 
   test('tuner path should show benchmarking progress', async ({ page }) => {
     // 1. Load model
-    await page.locator('input[placeholder*="safetensors"]').fill('temp_model.pt');
-    await page.getByRole('button', { name: 'Inspect Model' }).click();
-    await expect(page.getByText('Total Parameters')).toBeVisible({ timeout: 10000 });
+    await loadMockModel(page);
 
     // 2. Go to Tuner
     await page.getByRole('button', { name: 'Tuner' }).click();

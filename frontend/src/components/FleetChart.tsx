@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { Zap, Cpu } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-interface TelemetryData {
+export interface TelemetryData {
   machine_id: string;
   hardware_profile: {
     cpu?: string;

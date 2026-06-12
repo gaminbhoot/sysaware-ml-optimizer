@@ -1,33 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  MessageSquare, Wand2, Sparkles, Zap, 
-  Send, User, Bot, Command,
-  Trash2, RefreshCcw, Activity, Copy, MessageCircle, ArrowRight,
-  Plus, Edit2, X, Check, StopCircle, Brain, Settings, ChevronDown, Sidebar
+  MessageCircle, Settings, X
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useStore } from '../context/StoreContext';
 import { useNotification } from '../context/NotificationContext';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-
-interface Message {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  isThinking?: boolean;
-  thinking?: string;
-  thinkingDuration?: number;
-}
-
-interface Conversation {
-  id: string;
-  title: string;
-  messages: Message[];
-  systemPrompt: string;
-  modelId: string;
-  createdAt: number;
-}
+import { readSSEStream } from '../lib/sse';
+import { parseThinkingTags } from '../lib/thinking';
+import { ConversationSidebar } from '../components/ConversationSidebar';
+import { PromptLab } from '../components/PromptLab';
+import { ChatWorkspace } from '../components/ChatWorkspace';
+import type { Message, Conversation } from '../types/chat';
 
 export const Prompts = () => {
   const { modelAnalysis, lmStudioHost, lmStudioPort } = useStore();
@@ -82,9 +66,7 @@ export const Prompts = () => {
   const [labResult, setLabResult] = useState<any>(null);
   const [isOptimizing, setIsOptimizing] = useState(false);
 
-  const chatEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isInlineOptimizing, setIsInlineOptimizing] = useState(false);
 
   const HARDWARE_SUGGESTIONS = [
@@ -123,13 +105,6 @@ export const Prompts = () => {
     }
   };
 
-  // Auto-resize input textarea
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
-    }
-  }, [chatInput]);
 
   // Initialize a default conversation if list is empty
   useEffect(() => {
@@ -178,12 +153,6 @@ export const Prompts = () => {
     }
   }, [currentChatId, activeChat?.modelId]);
 
-  // Scroll to chat bottom
-  useEffect(() => {
-    if (isChatOpen) {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [conversations, isTyping, isChatOpen]);
 
   // Fetch available models from backend
   const fetchAvailableModels = async () => {
@@ -318,10 +287,10 @@ export const Prompts = () => {
     const finalHistory = [...historyToSend, assistantMsg];
     updateActiveChatMessages(finalHistory);
 
-    let buffer = '';
     const startTime = Date.now();
     let hasThinkStarted = false;
     let thinkEndTime = 0;
+    let fullContent = '';
 
     try {
       const response = await fetch('/api/chat/stream', {
@@ -336,83 +305,38 @@ export const Prompts = () => {
         signal: controller.signal
       });
 
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("No reader available");
+      await readSSEStream(response, (data) => {
+        if (data.content) {
+          fullContent += data.content;
 
-      let fullContent = '';
+          const parsed = parseThinkingTags(fullContent, hasThinkStarted, thinkEndTime);
+          hasThinkStarted = parsed.hasThinkStarted;
+          thinkEndTime = parsed.thinkEndTime;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+          const duration = thinkEndTime 
+            ? parseFloat(((thinkEndTime - startTime) / 1000).toFixed(1))
+            : parseFloat(((Date.now() - startTime) / 1000).toFixed(1));
 
-        buffer += new TextDecoder().decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+          assistantMsg = {
+            role: 'assistant',
+            content: parsed.parsedContent,
+            thinking: parsed.parsedThinking,
+            isThinking: parsed.isStillThinking,
+            thinkingDuration: hasThinkStarted ? duration : undefined
+          };
 
-        for (const line of lines) {
-          const trimmedLine = line.trim();
-          if (trimmedLine.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(trimmedLine.slice(6));
-              if (data.content) {
-                fullContent += data.content;
-
-                if (fullContent.includes('<think>') && !hasThinkStarted) {
-                  hasThinkStarted = true;
-                }
-
-                let isStillThinking = false;
-                let parsedThinking = '';
-                let parsedContent = fullContent;
-
-                if (fullContent.includes('<think>')) {
-                  if (fullContent.includes('</think>')) {
-                    const parts = fullContent.split('</think>');
-                    parsedThinking = parts[0].replace('<think>', '');
-                    parsedContent = parts.slice(1).join('</think>');
-                    if (thinkEndTime === 0) {
-                      thinkEndTime = Date.now();
-                    }
-                  } else {
-                    const parts = fullContent.split('<think>');
-                    parsedThinking = parts[1] || '';
-                    parsedContent = '';
-                    isStillThinking = true;
-                  }
-                }
-
-                const duration = thinkEndTime 
-                  ? parseFloat(((thinkEndTime - startTime) / 1000).toFixed(1))
-                  : parseFloat(((Date.now() - startTime) / 1000).toFixed(1));
-
-                assistantMsg = {
-                  role: 'assistant',
-                  content: parsedContent,
-                  thinking: parsedThinking,
-                  isThinking: isStillThinking,
-                  thinkingDuration: hasThinkStarted ? duration : undefined
-                };
-
-                setConversations(prev => prev.map(c => {
-                  if (c.id === currentChatId) {
-                    const msgs = [...c.messages];
-                    msgs[msgs.length - 1] = assistantMsg;
-                    return { ...c, messages: msgs };
-                  }
-                  return c;
-                }));
-              } else if (data.error) {
-                addNotification({ type: 'error', title: 'Model Error', message: data.error });
-                break;
-              } else if (data.status === 'done') {
-                break;
-              }
-            } catch (e) {
-              console.error("SSE Parse Error:", e);
+          setConversations(prev => prev.map(c => {
+            if (c.id === currentChatId) {
+              const msgs = [...c.messages];
+              msgs[msgs.length - 1] = assistantMsg;
+              return { ...c, messages: msgs };
             }
-          }
+            return c;
+          }));
+        } else if (data.error) {
+          addNotification({ type: 'error', title: 'Model Error', message: data.error });
         }
-      }
+      }, controller.signal);
     } catch (e: any) {
       if (e.name === 'AbortError') {
         console.log('Stream aborted');
@@ -541,224 +465,6 @@ export const Prompts = () => {
     setShowSystemPromptModal(false);
   };
 
-  const intents = [
-    { id: 'general', icon: <MessageSquare size={12} /> },
-    { id: 'coding', icon: <Zap size={12} /> },
-    { id: 'analysis', icon: <Sparkles size={12} /> }
-  ];
-
-  // Helper parsing logic for active message
-  const parseThinking = (text: string) => {
-    const thinkRegex = /<think>([\s\S]*?)<\/think>/;
-    const match = text.match(thinkRegex);
-    if (match) {
-      return {
-        thinking: match[1],
-        content: text.replace(thinkRegex, '').trim(),
-        isThinking: false
-      };
-    }
-    
-    if (text.includes('<think>')) {
-      const parts = text.split('<think>');
-      return {
-        thinking: parts[1] || '',
-        content: '',
-        isThinking: true
-      };
-    }
-    
-    return {
-      thinking: '',
-      content: text,
-      isThinking: false
-    };
-  };
-
-  // Nested Thinking Process block component
-  const ThinkingBlock = ({ thinking, duration, isThinking }: { thinking: string, duration?: number, isThinking: boolean }) => {
-    const [isOpen, setIsOpen] = useState(true);
-    if (!thinking && !isThinking) return null;
-
-    return (
-      <div className="mb-4 rounded-2xl border border-white/5 bg-white/[0.01] overflow-hidden transition-all duration-300">
-        <button 
-          onClick={() => setIsOpen(!isOpen)}
-          className="w-full flex items-center justify-between px-5 py-3 hover:bg-white/[0.02] transition-colors"
-        >
-          <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.2em] text-emerald/60">
-            <Brain size={12} className={cn(isThinking && "animate-pulse text-emerald")} />
-            <span>
-              {isThinking 
-                ? `Thinking Process... (${duration ? duration.toFixed(1) : 0}s)` 
-                : `Thought Process (${duration ? duration.toFixed(1) : 0}s)`
-              }
-            </span>
-          </div>
-          <motion.div
-            animate={{ rotate: isOpen ? 180 : 0 }}
-            transition={{ duration: 0.2 }}
-            className="text-white/20 hover:text-white transition-colors"
-          >
-            <ChevronDown size={14} />
-          </motion.div>
-        </button>
-        
-        <AnimatePresence initial={false}>
-          {isOpen && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.25, ease: 'easeInOut' }}
-            >
-              <div className="px-5 pb-4 text-[13px] font-mono leading-relaxed text-white/40 whitespace-pre-wrap border-t border-white/[0.03] pt-3">
-                {thinking}
-                {isThinking && (
-                  <span className="inline-flex gap-0.5 ml-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald/40 animate-bounce delay-100" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald/40 animate-bounce delay-200" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald/40 animate-bounce delay-300" />
-                  </span>
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    );
-  };
-
-  const renderPromptLab = (isSidebar: boolean) => {
-    return (
-      <div className={cn(
-        "flex-1 flex flex-col overflow-hidden relative group h-full",
-        isSidebar 
-          ? "bg-transparent border-0" 
-          : "glass-card border border-white/10 rounded-3xl shadow-[0_0_100px_rgba(0,0,0,0.5)]"
-      )}>
-        <div className="absolute inset-0 bg-gradient-to-b from-emerald/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-        
-        {/* Lab Header */}
-        <div className="p-5 border-b border-white/10 flex items-center justify-between bg-white/[0.01]">
-            <div className="flex items-center gap-3">
-                <div className="p-2 bg-emerald/10 rounded-lg text-emerald">
-                    <Sparkles size={16} />
-                </div>
-                <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-white">Prompt Enhancer</span>
-            </div>
-            {(!isSidebar) && (
-                <div className="flex items-center gap-4">
-                    <Badge className="bg-white/5 text-white/40 border-white/10 text-[9px]">HARDWARE AWARE</Badge>
-                </div>
-            )}
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 scrollbar-hide">
-            {/* Lab Input Section */}
-            <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-mono uppercase tracking-widest text-white/20">Semantic Raw Input</label>
-                    <button onClick={() => setLabInput('')} className="text-[9px] font-mono uppercase text-red-500/40 hover:text-red-500 transition-colors">Clear</button>
-                </div>
-                <textarea
-                    value={labInput}
-                    onChange={(e) => setLabInput(e.target.value)}
-                    placeholder="Enter a prompt to analyze and optimize..."
-                    className={cn(
-                        "w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-mono transition-all resize-none leading-relaxed placeholder:text-white/10 focus:outline-none focus:border-emerald/30 focus:ring-1 focus:ring-emerald/20 shadow-inner",
-                        isSidebar ? "h-32 text-xs" : "h-72 text-base"
-                    )}
-                />
-                
-                <div className="grid grid-cols-3 gap-3">
-                    {intents.map((intent) => (
-                        <button
-                            key={intent.id}
-                            onClick={() => setLabIntent(intent.id)}
-                            className={cn(
-                                "flex items-center justify-center gap-3 py-3 rounded-xl font-mono text-[10px] uppercase tracking-widest transition-all border",
-                                labIntent === intent.id ? 'bg-white text-black border-white shadow-xl' : 'bg-white/5 text-white/40 border-white/10 hover:text-white hover:bg-white/10'
-                            )}
-                        >
-                            {intent.icon} {intent.id}
-                        </button>
-                    ))}
-                </div>
-
-                <motion.button
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.99 }}
-                    onClick={optimizePromptAction}
-                    disabled={isOptimizing || !labInput}
-                    className="w-full group relative flex items-center justify-center gap-4 py-4 bg-white text-black rounded-xl font-mono text-xs uppercase tracking-[0.3em] transition-all hover:shadow-[0_0_40px_rgba(255,255,255,0.1)] disabled:opacity-50"
-                >
-                    {isOptimizing ? <RefreshCcw size={16} className="animate-spin" /> : <Wand2 size={16} />}
-                    <span>Optimize Flow</span>
-                </motion.button>
-            </div>
-
-            {/* Lab Result Section */}
-            <AnimatePresence>
-                {labResult && (
-                    <motion.div 
-                        initial={{ opacity: 0, height: 0 }} 
-                        animate={{ opacity: 1, height: 'auto' }} 
-                        exit={{ opacity: 0, height: 0 }}
-                        className="space-y-6 pt-8 border-t border-white/10"
-                    >
-                        <div className="flex items-center justify-between">
-                            <label className="text-[10px] font-mono uppercase tracking-widest text-emerald/50">Restructured Intelligence</label>
-                            <button 
-                                onClick={() => {
-                                    navigator.clipboard.writeText(labResult.optimized_prompt);
-                                    addNotification({ type: 'success', message: 'Copied!' });
-                                }}
-                                className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-white/40 hover:text-white transition-all border border-white/10"
-                            >
-                                <Copy size={14} />
-                            </button>
-                        </div>
-
-                        <div className={cn(
-                            "bg-emerald/[0.02] p-6 rounded-2xl border border-emerald/10 font-mono leading-relaxed whitespace-pre-wrap text-white/80 shadow-2xl relative overflow-hidden",
-                            isSidebar ? "text-xs p-5" : "text-sm"
-                        )}>
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald/5 blur-3xl pointer-events-none" />
-                            {labResult.optimized_prompt}
-                        </div>
-
-                        <button
-                            onClick={injectToChat}
-                            className="w-full flex items-center justify-center gap-4 py-4 bg-emerald text-black rounded-xl font-mono text-[10px] uppercase tracking-[0.2em] transition-all hover:shadow-[0_0_30px_rgba(16,185,129,0.3)] group/btn"
-                        >
-                            <span>Inject to Chat</span>
-                            <ArrowRight size={16} className="group-hover/btn:translate-x-1 transition-transform" />
-                        </button>
-
-                        {labResult.removed_words && !isSidebar && (
-                            <div className="flex flex-wrap gap-2 pt-4">
-                              <span className="text-[9px] font-mono uppercase text-white/20 w-full mb-1">Redundant tokens purged:</span>
-                              {labResult.removed_words.map((w: any, i: number) => (
-                                <span key={i} className="px-3 py-1 bg-red-500/5 text-red-500/50 rounded-full text-[9px] font-mono uppercase border border-red-500/10 tracking-tighter">-{w}</span>
-                              ))}
-                            </div>
-                        )}
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {!labResult && !isOptimizing && (
-                <div className="py-20 flex flex-col items-center justify-center text-center opacity-10">
-                    <Activity size={48} strokeWidth={1} className="mb-6" />
-                    <p className="text-xs font-mono uppercase tracking-[0.4em]">Engine Standby</p>
-                </div>
-            )}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-black text-white selection:bg-emerald/30 overflow-hidden flex flex-col h-screen">
       
@@ -807,7 +513,18 @@ export const Prompts = () => {
         {/* CLOSED CHAT LAYOUT: Center standalone Prompt Lab */}
         {!isChatOpen && (
           <div className="w-full max-w-5xl mx-auto h-full flex flex-col animate-fade-in">
-            {renderPromptLab(false)}
+            <PromptLab
+              isSidebar={false}
+              labInput={labInput}
+              setLabInput={setLabInput}
+              labIntent={labIntent}
+              setLabIntent={setLabIntent}
+              optimizePromptAction={optimizePromptAction}
+              isOptimizing={isOptimizing}
+              labResult={labResult}
+              injectToChat={injectToChat}
+              addNotification={addNotification}
+            />
           </div>
         )}
 
@@ -816,573 +533,55 @@ export const Prompts = () => {
           <div className="flex-1 flex overflow-hidden w-full h-full gap-0">
             
             {/* Conversation sidebar (Left) */}
-            <AnimatePresence>
-              {isConversationsSidebarOpen && (
-                <motion.div
-                  initial={{ width: 0, opacity: 0 }}
-                  animate={{ width: 260, opacity: 1 }}
-                  exit={{ width: 0, opacity: 0 }}
-                  transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                  className="flex flex-col border-r border-white/10 h-full bg-[#0a0a0c] overflow-hidden flex-shrink-0 relative z-20"
-                >
-                  <div className="p-5 border-b border-white/10 flex items-center justify-between">
-                    <span className="text-[10px] font-mono uppercase tracking-widest text-white/40">Conversations</span>
-                    <button 
-                      onClick={startNewChat}
-                      className="p-1.5 hover:bg-white/5 rounded-lg border border-white/10 text-white/40 hover:text-white transition-colors"
-                      title="New Conversation"
-                    >
-                      <Plus size={14} />
-                    </button>
-                  </div>
-                  
-                  <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">
-                    {conversations.map((c) => {
-                      const isActive = c.id === currentChatId;
-                      return (
-                        <div
-                          key={c.id}
-                          onClick={() => setCurrentChatId(c.id)}
-                          className={cn(
-                            "group flex items-center justify-between px-4 py-2.5 rounded-xl transition-all cursor-pointer",
-                            isActive 
-                              ? "bg-white/[0.06] text-white" 
-                              : "text-white/40 hover:text-white/80 hover:bg-white/[0.02]"
-                          )}
-                        >
-                          <div className="flex items-center gap-3 overflow-hidden flex-1">
-                            <MessageSquare size={14} className="flex-shrink-0" />
-                            {isEditingConversationId === c.id ? (
-                              <input
-                                type="text"
-                                value={editedConversationTitle}
-                                onChange={(e) => setEditedConversationTitle(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    renameChat(c.id, editedConversationTitle);
-                                  } else if (e.key === 'Escape') {
-                                    setIsEditingConversationId(null);
-                                  }
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                autoFocus
-                                className="bg-black/60 border border-white/10 rounded px-1.5 py-0.5 text-xs text-white font-mono focus:outline-none w-full"
-                              />
-                            ) : (
-                              <span className="text-xs font-mono truncate">{c.title}</span>
-                            )}
-                          </div>
+            <ConversationSidebar
+              conversations={conversations}
+              currentChatId={currentChatId}
+              setCurrentChatId={setCurrentChatId}
+              isConversationsSidebarOpen={isConversationsSidebarOpen}
+              startNewChat={startNewChat}
+              isEditingConversationId={isEditingConversationId}
+              setIsEditingConversationId={setIsEditingConversationId}
+              editedConversationTitle={editedConversationTitle}
+              setEditedConversationTitle={setEditedConversationTitle}
+              renameChat={renameChat}
+              deleteChat={deleteChat}
+            />
 
-                          {isEditingConversationId === c.id ? (
-                            <div className="flex items-center gap-1">
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  renameChat(c.id, editedConversationTitle);
-                                }}
-                                className="p-1 text-emerald hover:bg-emerald/10 rounded"
-                              >
-                                <Check size={12} />
-                              </button>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setIsEditingConversationId(null);
-                                }}
-                                className="p-1 text-red-500 hover:bg-red-500/10 rounded"
-                              >
-                                <X size={12} />
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setIsEditingConversationId(c.id);
-                                  setEditedConversationTitle(c.title);
-                                }}
-                                className="p-1 hover:bg-white/10 rounded text-white/40 hover:text-white transition-colors"
-                              >
-                                <Edit2 size={11} />
-                              </button>
-                              {conversations.length > 1 && (
-                                <button
-                                  onClick={(e) => deleteChat(c.id, e)}
-                                  className="p-1 hover:bg-red-500/10 rounded text-red-500/40 hover:text-red-500 transition-colors"
-                                >
-                                  <Trash2 size={11} />
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* User Profile Card */}
-                  <div className="p-5 border-t border-white/10 bg-[#070709] flex items-center gap-3 mt-auto shrink-0">
-                    <div className="w-9 h-9 rounded-full bg-emerald/10 border border-emerald/20 flex items-center justify-center text-emerald font-mono text-xs font-bold shadow-inner">
-                      OP
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-xs font-mono font-medium text-white/80 truncate">SysAware Operator</span>
-                      <span className="text-[9px] font-mono text-white/30 uppercase tracking-wider mt-0.5 font-semibold">Local Node</span>
-                    </div>
-                  </div>
-
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Chat Panel Area (Center) */}
-            <div className="flex-1 flex flex-col overflow-hidden h-full bg-[#050507] relative z-10">
-              
-              {/* Soothing Radial Background Ambient Gradient (Gemini style) */}
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,rgba(16,185,129,0.035),rgba(99,102,241,0.07),transparent_50%)] pointer-events-none z-0" />
-              
-              {/* Chat Header */}
-              <div className="p-4 px-6 border-b border-white/10 flex items-center justify-between bg-[#0a0a0c]/40 backdrop-blur-md relative z-20">
-                <div className="flex items-center gap-4">
-                  <button 
-                    onClick={() => setIsConversationsSidebarOpen(!isConversationsSidebarOpen)}
-                    className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-white/40 hover:text-white border border-white/10 transition-all"
-                    title="Toggle sidebar"
-                  >
-                    <Sidebar size={16} />
-                  </button>
-                  <div className="flex flex-col">
-                    <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-emerald leading-tight">
-                      {activeChat ? activeChat.title : 'Assistant'}
-                    </span>
-                    <span className="text-[9px] font-mono text-white/20 uppercase tracking-[0.1em] mt-0.5">Active chat session</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-
-
-                  {/* System instructions button */}
-                  <button
-                    onClick={openSystemPromptModal}
-                    className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-white/40 hover:text-white transition-all border border-white/10"
-                    title="System Instructions"
-                  >
-                    <Settings size={16} />
-                  </button>
-
-                  {/* Reset active chat */}
-                  <button 
-                    onClick={() => updateActiveChatMessages([{ role: 'assistant', content: 'Session reset.' }])}
-                    className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-white/40 hover:text-white transition-all border border-white/10"
-                    title="Clear Chat History"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-
-                  {/* Collapsible Lab Panel Toggle */}
-                  <button
-                    onClick={() => setIsLabSidebarOpen(!isLabSidebarOpen)}
-                    className={cn(
-                      "p-2.5 rounded-xl border transition-all",
-                      isLabSidebarOpen 
-                        ? "bg-emerald/10 text-emerald border-emerald/20 hover:bg-emerald/20" 
-                        : "bg-white/5 text-white/40 border-white/10 hover:bg-white/10 hover:text-white"
-                    )}
-                    title="Toggle Prompt Enhancer"
-                  >
-                    <Sparkles size={16} />
-                  </button>
-
-                  {/* Exit Chat button */}
-                  <button
-                    onClick={() => setIsChatOpen(false)}
-                    className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-white/40 hover:text-white border border-white/10 transition-all flex items-center gap-2"
-                    title="Close Chat"
-                  >
-                    <MessageCircle size={16} className="rotate-180 text-emerald" />
-                    <span className="hidden lg:inline text-[10px] font-mono uppercase tracking-wider">Exit Chat</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Message List */}
-              <div className="flex-1 overflow-y-auto p-6 md:p-10 space-y-10 scrollbar-hide relative z-10">
-                {isInitialState ? (
-                  <div className="flex flex-col items-center justify-center min-h-[70%] max-w-2xl mx-auto text-center px-4">
-                    <motion.div
-                      animate={{ rotate: [0, 5, -5, 0] }}
-                      transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                      className="w-16 h-16 rounded-full bg-emerald/10 border border-emerald/20 flex items-center justify-center text-emerald mb-8 shadow-[0_0_30px_rgba(16,185,129,0.15)] shrink-0"
-                    >
-                      <Sparkles size={28} className="text-emerald animate-pulse" />
-                    </motion.div>
-                    
-                    <h2 className="text-3xl font-light tracking-tight text-white/90 mb-4 font-sans leading-snug">
-                      What can I help you optimize today?
-                    </h2>
-                    <p className="text-xs font-mono text-white/30 uppercase tracking-[0.2em] mb-12">
-                      SysAware Hardware-Aware Assistant
-                    </p>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 w-full max-w-xl">
-                      {HARDWARE_SUGGESTIONS.map((suggestion, idx) => (
-                        <motion.button
-                          key={idx}
-                          whileHover={{ scale: 1.02, backgroundColor: "rgba(255,255,255,0.03)" }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => {
-                            setChatInput(suggestion);
-                            textareaRef.current?.focus();
-                          }}
-                          className="p-4 rounded-xl border border-white/10 bg-[#0c0c10]/40 text-left text-xs font-mono text-white/50 hover:text-white/80 transition-all flex items-center justify-between group/chip cursor-pointer"
-                        >
-                          <span className="pr-4 line-clamp-2 leading-relaxed">{suggestion}</span>
-                          <ArrowRight size={12} className="opacity-0 group-hover/chip:opacity-100 transition-opacity text-emerald shrink-0" />
-                        </motion.button>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="max-w-3xl mx-auto w-full flex-grow flex flex-col space-y-10">
-                    {chatHistory.map((msg, i) => {
-                      const isUser = msg.role === 'user';
-                      const parsed = parseThinking(msg.content);
-                      
-                      return (
-                        <motion.div
-                          key={i}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.05 }}
-                          className={cn(
-                            "flex gap-6 max-w-[85%] md:max-w-[75%] relative group/bubble",
-                            isUser ? "ml-auto flex-row-reverse" : "w-full"
-                          )}
-                        >
-                          {/* Avatar */}
-                          <div className={cn(
-                            "w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-md border",
-                            isUser 
-                              ? "bg-white/10 text-white border-white/5" 
-                              : "bg-emerald/10 text-emerald border-emerald/10 shadow-[0_0_10px_rgba(16,185,129,0.1)]"
-                          )}>
-                            {isUser ? <User size={16} /> : <Bot size={16} />}
-                          </div>
-
-                          {/* Message actions tooltips on hover */}
-                          {!isUser && msg.content && (
-                            <div className="absolute left-16 -top-5 p-1 rounded-xl bg-black/80 border border-white/5 opacity-0 group-hover/bubble:opacity-100 transition-opacity flex items-center gap-1 z-10">
-                              <button 
-                                onClick={() => {
-                                  navigator.clipboard.writeText(parsed.content || msg.content);
-                                  addNotification({ type: 'success', message: 'Copied!' });
-                                }}
-                                className="p-1.5 hover:bg-white/10 rounded text-white/40 hover:text-white transition-colors"
-                                title="Copy response"
-                              >
-                                <Copy size={12} />
-                              </button>
-                              {i > 0 && chatHistory[i-1]?.role === 'user' && (
-                                <button 
-                                  onClick={() => handleRegenerate(i)}
-                                  className="p-1.5 hover:bg-white/10 rounded text-white/40 hover:text-white transition-colors"
-                                  title="Regenerate response"
-                                >
-                                  <RefreshCcw size={12} />
-                                </button>
-                              )}
-                            </div>
-                          )}
-
-                          {isUser && editingMessageIndex !== i && (
-                            <div className="absolute right-16 -top-5 p-1 rounded-xl bg-black/80 border border-white/5 opacity-0 group-hover/bubble:opacity-100 transition-opacity flex items-center gap-1 z-10">
-                              <button 
-                                onClick={() => {
-                                  setEditingMessageIndex(i);
-                                  setEditingMessageText(msg.content);
-                                }}
-                                className="p-1.5 hover:bg-white/10 rounded text-white/40 hover:text-white transition-colors"
-                                title="Edit message"
-                              >
-                                <Edit2 size={12} />
-                              </button>
-                              <button 
-                                onClick={() => {
-                                  navigator.clipboard.writeText(msg.content);
-                                  addNotification({ type: 'success', message: 'Copied!' });
-                                }}
-                                className="p-1.5 hover:bg-white/10 rounded text-white/40 hover:text-white transition-colors"
-                                title="Copy message"
-                              >
-                                <Copy size={12} />
-                              </button>
-                            </div>
-                          )}
-
-                          {/* Content bubble */}
-                          <div className={cn(
-                            isUser 
-                              ? "p-4.5 px-6 rounded-[22px] rounded-br-none text-[15px] leading-relaxed shadow-xl border border-white/10 bg-white/5 text-white/90 relative" 
-                              : "p-4 px-1 text-[15px] leading-relaxed text-white/95 relative w-full"
-                          )}>
-                            
-                            {/* Inline editing for User */}
-                            {isUser && editingMessageIndex === i ? (
-                              <div className="flex flex-col gap-2.5 min-w-[280px]">
-                                <textarea
-                                  value={editingMessageText}
-                                  onChange={(e) => setEditingMessageText(e.target.value)}
-                                  className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-xs font-mono focus:outline-none focus:border-emerald/40 resize-none min-h-[90px]"
-                                />
-                                <div className="flex items-center justify-end gap-2">
-                                  <button
-                                    onClick={() => setEditingMessageIndex(null)}
-                                    className="px-3 py-1.5 rounded-lg border border-white/5 bg-white/5 text-[10px] uppercase font-mono tracking-wider hover:bg-white/10 text-white"
-                                  >
-                                    Cancel
-                                  </button>
-                                  <button
-                                    onClick={() => handleEditMessageSubmit(i, editingMessageText)}
-                                    className="px-3 py-1.5 rounded-lg bg-emerald text-black text-[10px] uppercase font-mono tracking-wider hover:scale-102 active:scale-98 transition-transform font-bold"
-                                  >
-                                    Send
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <>
-                                {/* Render Thinking block if Assistant */}
-                                {!isUser && (
-                                  <ThinkingBlock 
-                                    thinking={msg.thinking || ''} 
-                                    duration={msg.thinkingDuration} 
-                                    isThinking={msg.isThinking || false} 
-                                  />
-                                )}
-
-                                {/* Render actual response Markdown */}
-                                {parsed.content || isUser ? (
-                                  <div className="markdown-content whitespace-pre-wrap overflow-x-auto">
-                                    <ReactMarkdown 
-                                      remarkPlugins={[remarkGfm]}
-                                      components={{
-                                        code({ node, inline, className, children, ...props }: any) {
-                                          const match = /language-(\w+)/.exec(className || '');
-                                          const lang = match ? match[1] : 'code';
-                                          return !inline ? (
-                                            <div className="relative group/code mb-5 last:mb-0 rounded-2xl border border-white/5 overflow-hidden shadow-2xl bg-black/30">
-                                              {/* Code Block Header */}
-                                              <div className="flex items-center justify-between px-5 py-2.5 bg-black/50 border-b border-white/5 text-[10px] font-mono text-white/30 uppercase tracking-widest">
-                                                <span>{lang}</span>
-                                                <button
-                                                  onClick={() => {
-                                                    const codeText = String(children).replace(/\n$/, '');
-                                                    navigator.clipboard.writeText(codeText);
-                                                    addNotification({ type: 'success', message: 'Code copied' });
-                                                  }}
-                                                  className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 text-white/50 hover:text-emerald transition-colors"
-                                                  title="Copy Code"
-                                                >
-                                                  <Copy size={11} />
-                                                  <span>Copy</span>
-                                                </button>
-                                              </div>
-                                              <pre className={cn("p-5 overflow-x-auto font-mono text-xs leading-relaxed max-w-full scrollbar-thin", className)} {...props}>
-                                                <code className="text-white/90">{children}</code>
-                                              </pre>
-                                            </div>
-                                          ) : (
-                                            <code className="bg-white/10 px-1.5 py-0.5 rounded text-sm font-mono text-emerald" {...props}>
-                                              {children}
-                                            </code>
-                                          );
-                                        }
-                                      }}
-                                    >
-                                      {isUser ? msg.content : parsed.content}
-                                    </ReactMarkdown>
-                                  </div>
-                                ) : (
-                                  // Render Typing indicator if empty content
-                                  <div className="flex gap-1.5 pt-2">
-                                    <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1 }} className="w-1.5 h-1.5 rounded-full bg-emerald/60 animate-pulse" />
-                                    <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1, delay: 0.2 }} className="w-1.5 h-1.5 rounded-full bg-emerald/60 animate-pulse" />
-                                    <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1, delay: 0.4 }} className="w-1.5 h-1.5 rounded-full bg-emerald/60 animate-pulse" />
-                                  </div>
-                                )}
-                              </>
-                            )}
-
-                          </div>
-                        </motion.div>
-                      );
-                    })}
-                    {isTyping && chatHistory[chatHistory.length-1]?.role !== 'assistant' && (
-                      <div className="flex gap-6 w-full max-w-[85%] md:max-w-[75%]">
-                        <div className="w-9 h-9 rounded-full bg-emerald/10 border border-emerald/10 flex items-center justify-center text-emerald shadow-md shrink-0 mt-1">
-                          <Bot size={16} />
-                        </div>
-                        <div className="bg-transparent p-4 px-1 rounded-none border-0 text-sm w-full">
-                          <div className="flex gap-1.5 pt-2">
-                            <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1 }} className="w-1.5 h-1.5 rounded-full bg-emerald/60 animate-pulse" />
-                            <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1, delay: 0.2 }} className="w-1.5 h-1.5 rounded-full bg-emerald/60 animate-pulse" />
-                            <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1, delay: 0.4 }} className="w-1.5 h-1.5 rounded-full bg-emerald/60 animate-pulse" />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div ref={chatEndRef} />
-              </div>
-
-              {/* Chat Input */}
-              <div className="p-6 pb-8 bg-gradient-to-t from-[#050507] via-[#050507]/90 to-transparent relative z-20 flex-shrink-0">
-                <div className="max-w-3xl mx-auto relative">
-                  
-                  {/* Floating Pill Input Bar */}
-                  <div className="rounded-[28px] bg-[#0c0c10] border border-white/10 focus-within:border-emerald/40 transition-all shadow-xl flex items-end p-2 pl-4 pr-2.5">
-                    
-                    {/* Inline Sparkles (Optimize) Button on the Left */}
-                    <button
-                      onClick={handleInlineOptimize}
-                      disabled={!chatInput.trim() || isInlineOptimizing}
-                      className={cn(
-                        "p-3 rounded-full flex items-center justify-center transition-all shrink-0 mb-0.5",
-                        isInlineOptimizing 
-                          ? "bg-emerald/10 text-emerald animate-pulse" 
-                          : chatInput.trim() 
-                            ? "bg-white/5 text-emerald hover:bg-white/10 hover:scale-105" 
-                            : "bg-transparent text-white/20 cursor-not-allowed"
-                      )}
-                      title="Optimize prompt for hardware"
-                    >
-                      {isInlineOptimizing ? (
-                        <RefreshCcw size={16} className="animate-spin text-emerald" />
-                      ) : (
-                        <Sparkles size={16} className={cn(chatInput.trim() && "text-emerald")} />
-                      )}
-                    </button>
-
-                    {/* Auto-growing Textarea */}
-                    <textarea
-                      ref={textareaRef}
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSendMessage();
-                        }
-                      }}
-                      placeholder="Message SysAware Assistant..."
-                      className="flex-1 bg-transparent border-0 outline-none focus:outline-none focus:ring-0 text-white font-mono text-sm placeholder:text-white/25 resize-none py-3 px-3 min-h-[44px] max-h-[200px] leading-relaxed self-center scrollbar-thin"
-                      rows={1}
-                    />
-
-                    {/* Right side controls inside input pill */}
-                    <div className="flex items-center gap-2 mb-0.5 shrink-0 self-center">
-                      
-                       {/* Clickable Active Model Selector within input box */}
-                       <div className="relative">
-                         <button 
-                           onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                           className="hidden sm:inline-flex px-2.5 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white text-[9px] font-mono text-white/40 uppercase tracking-wider transition-all items-center gap-1.5 focus:outline-none"
-                           disabled={isLoadingModel}
-                           title="Switch Model"
-                         >
-                           {isLoadingModel ? (
-                             <RefreshCcw size={10} className="animate-spin text-emerald" />
-                           ) : (
-                             <Activity size={10} className="text-emerald/60" />
-                           )}
-                           <span>{selectedModel ? (selectedModel.length > 12 ? selectedModel.substring(0, 10) + '..' : selectedModel) : 'Select Model'}</span>
-                           <ChevronDown size={10} className="opacity-40" />
-                         </button>
-
-                         <AnimatePresence>
-                           {isModelDropdownOpen && (
-                             <motion.div
-                               initial={{ opacity: 0, y: 10 }}
-                               animate={{ opacity: 1, y: 0 }}
-                               exit={{ opacity: 0, y: 10 }}
-                               className="absolute right-0 bottom-full mb-3.5 w-64 border border-white/10 rounded-xl p-2.5 shadow-2xl z-30"
-                               style={{ 
-                                 backgroundColor: 'rgba(10, 10, 12, 0.98)',
-                                 backdropFilter: 'blur(24px)', 
-                                 WebkitBackdropFilter: 'blur(24px)' 
-                               }}
-                             >
-                               <div className="text-[9px] font-mono uppercase tracking-widest text-white/20 px-3 py-1.5 border-b border-white/10 mb-1.5">Available Models</div>
-                               <div className="max-h-48 overflow-y-auto space-y-1 scrollbar-hide">
-                                 {isModelsLoading ? (
-                                   <div className="text-xs font-mono text-white/40 px-3 py-2 flex items-center gap-2">
-                                     <RefreshCcw className="w-3 h-3 animate-spin text-emerald" />
-                                     Loading models...
-                                   </div>
-                                 ) : availableModels.length === 0 ? (
-                                   <div className="text-xs font-mono text-white/20 px-3 py-2">No models loaded. Start LM Studio first.</div>
-                                 ) : (
-                                   availableModels.map((m) => (
-                                     <button
-                                       key={m.model_id}
-                                       onClick={() => {
-                                         handleModelChange(m.model_id);
-                                         setIsModelDropdownOpen(false);
-                                       }}
-                                       className={cn(
-                                         "w-full text-left px-3 py-2 rounded-xl text-xs font-mono transition-all flex flex-col gap-0.5 hover:bg-white/5",
-                                         selectedModel === m.model_id ? "text-emerald bg-emerald/5" : "text-white/60"
-                                       )}
-                                     >
-                                       <span>{m.model_name}</span>
-                                       <span className="text-[9px] opacity-40">
-                                         {m.num_params ? `${(m.num_params / 1e9).toFixed(1)}B` : ''} 
-                                         {m.size_mb ? ` (${m.size_mb.toFixed(0)} MB)` : ''}
-                                       </span>
-                                     </button>
-                                   ))
-                                 )}
-                               </div>
-                             </motion.div>
-                           )}
-                         </AnimatePresence>
-                       </div>
-
-                      {/* Integrated Send/Stop Button */}
-                      {isTyping ? (
-                        <button
-                          onClick={stopGeneration}
-                          aria-label="Stop Generating"
-                          className="p-3 bg-red-500 text-white rounded-full hover:scale-105 active:scale-95 transition-all flex items-center justify-center"
-                        >
-                          <StopCircle size={16} />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleSendMessage()}
-                          disabled={!chatInput.trim()}
-                          aria-label="Send Message"
-                          className="p-3 bg-emerald text-black rounded-full hover:scale-105 active:scale-95 transition-all disabled:opacity-20 flex items-center justify-center shadow-lg"
-                        >
-                          <Send size={16} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* Enter to analyze indicator */}
-                  <div className="mt-4 flex items-center justify-center gap-4 text-[9px] font-mono text-white/10 uppercase tracking-[0.2em]">
-                    <div className="flex items-center gap-1"><Command size={10} /> Enter to Send</div>
-                    <div className="w-1 h-1 rounded-full bg-white/5" />
-                    <div className="flex items-center gap-1"><Activity size={10} /> Hardware Ingestion Active</div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
+            {/* Chat Workspace (Center) */}
+            <ChatWorkspace
+              activeChat={activeChat}
+              chatHistory={chatHistory}
+              chatInput={chatInput}
+              setChatInput={setChatInput}
+              isTyping={isTyping}
+              stopGeneration={stopGeneration}
+              handleSendMessage={handleSendMessage}
+              editingMessageIndex={editingMessageIndex}
+              editingMessageText={editingMessageText}
+              setEditingMessageIndex={setEditingMessageIndex}
+              setEditingMessageText={setEditingMessageText}
+              handleEditMessageSubmit={handleEditMessageSubmit}
+              handleRegenerate={handleRegenerate}
+              selectedModel={selectedModel}
+              availableModels={availableModels}
+              isModelsLoading={isModelsLoading}
+              isLoadingModel={isLoadingModel}
+              handleModelChange={handleModelChange}
+              isModelDropdownOpen={isModelDropdownOpen}
+              setIsModelDropdownOpen={setIsModelDropdownOpen}
+              isConversationsSidebarOpen={isConversationsSidebarOpen}
+              setIsConversationsSidebarOpen={setIsConversationsSidebarOpen}
+              isLabSidebarOpen={isLabSidebarOpen}
+              setIsLabSidebarOpen={setIsLabSidebarOpen}
+              isInitialState={isInitialState}
+              addNotification={addNotification}
+              handleInlineOptimize={handleInlineOptimize}
+              isInlineOptimizing={isInlineOptimizing}
+              openSystemPromptModal={openSystemPromptModal}
+              setIsChatOpen={setIsChatOpen}
+              HARDWARE_SUGGESTIONS={HARDWARE_SUGGESTIONS}
+              updateActiveChatMessages={updateActiveChatMessages}
+            />
 
             {/* Collapsible Laboratory Sidebar (Right) */}
             <AnimatePresence>
@@ -1394,7 +593,18 @@ export const Prompts = () => {
                   transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
                   className="flex-shrink-0 h-full overflow-hidden flex flex-col border-l border-white/10 bg-[#0a0a0c]/90 relative z-20"
                 >
-                  {renderPromptLab(true)}
+                  <PromptLab
+                    isSidebar={true}
+                    labInput={labInput}
+                    setLabInput={setLabInput}
+                    labIntent={labIntent}
+                    setLabIntent={setLabIntent}
+                    optimizePromptAction={optimizePromptAction}
+                    isOptimizing={isOptimizing}
+                    labResult={labResult}
+                    injectToChat={injectToChat}
+                    addNotification={addNotification}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1461,9 +671,3 @@ export const Prompts = () => {
     </div>
   );
 };
-
-const Badge = ({ children, className }: { children: React.ReactNode, className?: string }) => (
-  <span className={cn("px-3 py-1 rounded-full text-[9px] font-mono tracking-widest border uppercase", className)}>
-    {children}
-  </span>
-);

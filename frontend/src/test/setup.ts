@@ -1,4 +1,4 @@
-// fallow-ignore-next-line unused-files
+// fallow-ignore-file unused-file
 import '@testing-library/jest-dom';
 import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';

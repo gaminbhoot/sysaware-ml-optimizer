@@ -1,0 +1,8 @@
+{
+  "ignoreDependencies": [
+    "three",
+    "@react-three/fiber",
+    "three-stdlib",
+    "camera-controls"
+  ]
+}

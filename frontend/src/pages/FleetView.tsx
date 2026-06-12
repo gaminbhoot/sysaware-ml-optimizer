@@ -4,6 +4,7 @@ import { Server, Zap, History, LayoutGrid, List, Trash2, Activity, Filter, Refre
 import { cn } from '../lib/utils';
 import { useNotification } from '../context/NotificationContext';
 import { FleetChart } from '../components/FleetChart';
+import type { TelemetryData } from '../components/FleetChart';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { DataValue } from '../components/ui/DataValue';
@@ -19,22 +20,6 @@ interface NodeData {
   };
   status: string;
   last_seen: string;
-}
-
-interface TelemetryData {
-  machine_id: string;
-  hardware_profile: {
-    cpu?: string;
-    ram_gb?: number;
-    dgpu_name?: string;
-    os?: string;
-  };
-  goal: string;
-  latency_range: [number, number];
-  memory_mb: number;
-  decode_tokens_per_sec?: number;
-  prefill_latency_ms?: number;
-  timestamp: string;
 }
 
 interface ConfirmConfig {
@@ -56,6 +41,15 @@ export const FleetView = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showClearDropdown, setShowClearDropdown] = useState(false);
+
+  const renderStatus = (onlineText: string, offlineText: string) => (
+    <>
+      <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-emerald animate-pulse" : "bg-rose-500")} />
+      <span className={cn("text-xs font-medium", isConnected ? "text-emerald" : "text-rose-500")}>
+        {isConnected ? onlineText : offlineText}
+      </span>
+    </>
+  );
   const [statsScope, setStatsScope] = useState<'session' | 'alltime'>('session');
   const [copiedText, setCopiedText] = useState<string | null>(null);
   
@@ -434,10 +428,7 @@ export const FleetView = () => {
             <p className="text-xs text-muted mt-2 font-light leading-relaxed">Time to process prompt tokens before output starts. Lower is better.</p>
           </div>
           <div className="mt-6 flex items-center gap-2">
-            <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-emerald animate-pulse" : "bg-rose-500")} />
-            <span className={cn("text-xs font-medium", isConnected ? "text-emerald" : "text-rose-500")}>
-              {isConnected ? "Real-time telemetry" : "Telemetry offline"}
-            </span>
+            {renderStatus("Real-time telemetry", "Telemetry offline")}
           </div>
         </div>
         
@@ -450,10 +441,7 @@ export const FleetView = () => {
             <p className="text-xs text-muted mt-2 font-light leading-relaxed">Average decode throughput speed during text generation. Higher is better.</p>
           </div>
           <div className="mt-6 flex items-center gap-2">
-            <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-emerald animate-pulse" : "bg-rose-500")} />
-            <span className={cn("text-xs font-medium", isConnected ? "text-emerald" : "text-rose-500")}>
-              {isConnected ? "Active streaming" : "Disconnected"}
-            </span>
+            {renderStatus("Active streaming", "Disconnected")}
           </div>
         </div>
       </Card>
