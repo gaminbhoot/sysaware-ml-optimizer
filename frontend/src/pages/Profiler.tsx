@@ -127,8 +127,7 @@ export const Profiler = () => {
         {/* Right Panel / Info */}
         <div className="col-span-1 lg:col-span-4 order-1 lg:order-2">
           <div className="glass-card p-6 md:p-8 lg:sticky lg:top-24 border-emerald/10">
-            <div className="flex items-center gap-3 mb-6">
-               <div className="w-2 h-2 rounded-full bg-emerald shadow-[0_0_8px_#10B981]" />
+            <div className="mb-6">
                <h3 className="text-luxury-subheading !text-lg !font-bold tracking-tight">Capabilities</h3>
             </div>
             

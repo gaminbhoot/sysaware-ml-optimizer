@@ -9,8 +9,12 @@ import threading
 from pathlib import Path
 from typing import Any
 
-# Ensure the backend directory is in sys.path for module discovery (especially for torch.load)
-sys.path.insert(0, str(Path(__file__).parent))
+# Ensure the backend directory is in sys.path and package context is set for direct execution
+if __name__ == "__main__" and __package__ is None:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    __package__ = "sysaware"
+else:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from .core.contracts import GOALS
 from .core.estimator import estimate_performance

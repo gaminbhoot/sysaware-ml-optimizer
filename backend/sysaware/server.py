@@ -14,8 +14,12 @@ import time
 from pathlib import Path
 from huggingface_hub import HfApi
 
-# Ensure the backend directory is in sys.path
-sys.path.insert(0, str(Path(__file__).parent))
+# Ensure the backend directory is in sys.path and package context is set for direct execution
+if __name__ == "__main__" and __package__ is None:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    __package__ = "sysaware"
+else:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from .core import system_profiler as sp
 from .core import model_analyzer as ma
