@@ -36,3 +36,7 @@ sysaware = "sysaware.cli:main"
 [tool.setuptools.packages.find]
 where = ["backend"]
 include = ["sysaware", "sysaware.*"]
+
+[tool.vercel]
+entrypoint = "backend.sysaware.server:app"
+
