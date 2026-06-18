@@ -81,8 +81,13 @@ def test_self_approval_prevention():
     payload = {
         "machine_id": "test_node_id"
     }
-    # If X-Machine-ID matches the node being approved, reject
-    response = client.post("/api/fleet/join/approve", json=payload, headers={"X-Machine-ID": "test_node_id"})
+    # If X-Machine-ID matches the node being approved, reject.
+    # Note: approve is an admin route, so we must provide the admin API key.
+    response = client.post(
+        "/api/fleet/join/approve",
+        json=payload,
+        headers={"X-API-Key": "admin_test_key", "X-Machine-ID": "test_node_id"}
+    )
     assert response.status_code == 400
     assert "Nodes cannot approve their own" in response.json()["detail"]
 
@@ -142,6 +147,7 @@ def test_telemetry_stream_token_auth(monkeypatch):
     monkeypatch.setattr(server.broker, "subscribe", mock_subscribe)
     
     client = TestClient(app)
+    client.no_auth_inject = True
     
     # 1. Request stream-token using API key
     response = client.post("/api/auth/stream-token", headers={"X-API-Key": "my_test_key"})
@@ -169,14 +175,8 @@ def test_chat_stream_timeout(monkeypatch):
     from sysaware.core.lmstudio import LMStudioClient
     monkeypatch.setattr(LMStudioClient, "chat_stream", MockClient.chat_stream)
     
-    original_time = time.time
-    time_counter = [original_time()]
-    def mock_time():
-        t = time_counter[0]
-        time_counter[0] += 70.0
-        return t
-        
-    monkeypatch.setattr(server, "time", type('TimeMock', (), {'time': mock_time}))
+    # Monkeypatch CHAT_STREAM_TIMEOUT to be near zero to trigger asyncio.timeout immediately
+    monkeypatch.setattr(server, "CHAT_STREAM_TIMEOUT", 0.001)
     
     client = TestClient(app)
     payload = {
