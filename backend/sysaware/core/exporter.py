@@ -84,22 +84,29 @@ class InferenceResponse(BaseModel):
 
 # API Key / Bearer Authentication Middleware
 SYSAWARE_API_KEY = os.getenv("SYSAWARE_API_KEY")
+if not SYSAWARE_API_KEY:
+    import secrets
+    SYSAWARE_API_KEY = "sysaware_runner_" + secrets.token_hex(16)
+    print("\\n" + "!" * 60)
+    print("WARNING: No SYSAWARE_API_KEY was provided.")
+    print("Generated a secure random API key for this runner:")
+    print("  " + SYSAWARE_API_KEY)
+    print("Please set SYSAWARE_API_KEY in your environment to use a persistent key.")
+    print("!" * 60 + "\\n")
 
 @app.middleware("http")
 async def verify_auth(request: Request, call_next):
-    # Only enforce if API Key is configured in environment
-    if SYSAWARE_API_KEY:
-        provided_key = request.headers.get("X-API-Key")
-        if not provided_key:
-            auth_header = request.headers.get("Authorization")
-            if auth_header and auth_header.startswith("Bearer "):
-                provided_key = auth_header[7:]
-        if provided_key != SYSAWARE_API_KEY:
-            from fastapi.responses import JSONResponse
-            return JSONResponse(
-                status_code=401,
-                content={{"detail": "Unauthorized: Invalid or missing API key."}}
-            )
+    provided_key = request.headers.get("X-API-Key")
+    if not provided_key:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            provided_key = auth_header[7:]
+    if provided_key != SYSAWARE_API_KEY:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=401,
+            content={{"detail": "Unauthorized: Invalid or missing API key."}}
+        )
     return await call_next(request)
 
 @app.on_event("startup")

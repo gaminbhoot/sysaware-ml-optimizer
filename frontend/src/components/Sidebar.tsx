@@ -16,10 +16,10 @@ export const Sidebar = () => {
   if (location.pathname === '/') return null; // Hide on Home page (The Void)
 
   const handleSetKey = () => {
-    const currentKey = localStorage.getItem('sysaware_api_key') || '';
+    const currentKey = sessionStorage.getItem('sysaware_api_key') || '';
     const newKey = prompt('Configure SysAware API Key:', currentKey);
     if (newKey !== null) {
-      localStorage.setItem('sysaware_api_key', newKey.trim());
+      sessionStorage.setItem('sysaware_api_key', newKey.trim());
       window.location.reload();
     }
   };

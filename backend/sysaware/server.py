@@ -57,15 +57,29 @@ IS_PRODUCTION = ENV.lower() == "production"
 
 # 1. API Authentication Key
 SYSAWARE_API_KEY = os.getenv("SYSAWARE_API_KEY")
-if not SYSAWARE_API_KEY and IS_PRODUCTION:
+if not SYSAWARE_API_KEY and ENV.lower() != "test":
     import secrets
     SYSAWARE_API_KEY = "sysaware_" + secrets.token_hex(16)
     print("\n" + "!" * 60)
-    print(f"PRODUCTION WARNING: No SYSAWARE_API_KEY was provided.")
+    print(f"WARNING: No SYSAWARE_API_KEY was provided.")
     print(f"Generated a secure random API key for this session:")
     print(f"  {SYSAWARE_API_KEY}")
     print("Please set SYSAWARE_API_KEY in your environment to use a persistent key.")
     print("!" * 60 + "\n")
+
+# 1b. Admin key separation in production
+SYSAWARE_ADMIN_KEY = os.getenv("SYSAWARE_ADMIN_KEY")
+if IS_PRODUCTION and not SYSAWARE_ADMIN_KEY:
+    import secrets
+    SYSAWARE_ADMIN_KEY = "sysaware_admin_" + secrets.token_hex(16)
+    print("\n" + "!" * 60)
+    print(f"PRODUCTION WARNING: No SYSAWARE_ADMIN_KEY was provided.")
+    print(f"Generated a secure random ADMIN API key for this session:")
+    print(f"  {SYSAWARE_ADMIN_KEY}")
+    print("Please set SYSAWARE_ADMIN_KEY in your environment to use a persistent admin key.")
+    print("!" * 60 + "\n")
+elif not SYSAWARE_ADMIN_KEY:
+    SYSAWARE_ADMIN_KEY = SYSAWARE_API_KEY
 
 # 2. Host Bind Config
 SYSAWARE_BIND = os.getenv("SYSAWARE_BIND", "127.0.0.1")
@@ -95,10 +109,13 @@ allowed_model_dirs_env = os.getenv("SYSAWARE_ALLOWED_MODEL_DIRS")
 if allowed_model_dirs_env:
     ALLOWED_MODEL_DIRS = [os.path.realpath(d.strip()) for d in allowed_model_dirs_env.split(",") if d.strip()]
 else:
-    # Allow workspace directory and current working directory
+    # Allow narrow subdirectories only
+    cwd = os.getcwd()
+    pkg_dir = os.path.dirname(os.path.abspath(__file__))
     ALLOWED_MODEL_DIRS = [
-        os.path.realpath(os.getcwd()),
-        os.path.realpath(os.path.dirname(os.path.abspath(__file__)))
+        os.path.realpath(os.path.join(cwd, "models")),
+        os.path.realpath(os.path.join(cwd, "artifacts")),
+        os.path.realpath(os.path.join(pkg_dir, "dummy_models"))
     ]
 
 # 6. Unsafe Load Allow
@@ -108,7 +125,7 @@ SYSAWARE_ALLOW_UNSAFE_LOAD = os.getenv("SYSAWARE_ALLOW_UNSAFE_LOAD", "false").lo
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -160,6 +177,65 @@ MAX_PAYLOAD_SIZES = {
 }
 DEFAULT_MAX_PAYLOAD_SIZE = 2 * 1024 * 1024 # 2 MB
 
+class ContentTooLargeError(BaseException):
+    pass
+
+class LimitUploadSizeMiddleware:
+    def __init__(self, app, max_payload_sizes: dict, default_max_size: int):
+        self.app = app
+        self.max_payload_sizes = max_payload_sizes
+        self.default_max_size = default_max_size
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        method = scope.get("method")
+        path = scope.get("path")
+
+        if method not in ("POST", "PUT", "PATCH"):
+            await self.app(scope, receive, send)
+            return
+
+        max_size = self.max_payload_sizes.get(path, self.default_max_size)
+        total_received = 0
+
+        async def custom_receive():
+            nonlocal total_received
+            event = await receive()
+            if event["type"] == "http.request":
+                body = event.get("body", b"")
+                total_received += len(body)
+                if total_received > max_size:
+                    raise ContentTooLargeError("Request payload too large.")
+            return event
+
+        try:
+            await self.app(scope, custom_receive, send)
+        except ContentTooLargeError:
+            await send({
+                "type": "http.response.start",
+                "status": 413,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                ]
+            })
+            await send({
+                "type": "http.response.body",
+                "body": json.dumps({"detail": f"Request payload too large. Max allowed is {max_size} bytes."}).encode(),
+            })
+
+app.add_middleware(
+    LimitUploadSizeMiddleware,
+    max_payload_sizes=MAX_PAYLOAD_SIZES,
+    default_max_size=DEFAULT_MAX_PAYLOAD_SIZE
+)
+
+
+# Short-lived one-time stream tokens for EventSource telemetry stream
+_STREAM_TOKENS = {}
+
 EXPENSIVE_ROUTES = [
     "/api/chat/stream",
     "/api/diagnose/custom/stream",
@@ -187,7 +263,7 @@ async def security_middleware(request: Request, call_next):
     path = request.url.path
     client_ip = request.client.host if request.client else "unknown"
     
-    # 1. Payload Size Check
+    # 1. Payload Size Check (for Content-Length header, as a fast-reject path)
     if request.method in ["POST", "PUT", "PATCH"]:
         content_length = request.headers.get("content-length")
         if content_length:
@@ -202,8 +278,7 @@ async def security_middleware(request: Request, call_next):
             except ValueError:
                 return JSONResponse(status_code=400, content={"detail": "Invalid Content-Length header"})
 
-    # Only secure /api routes except /api/system
-    if path.startswith("/api") and path != "/api/system":
+    if path.startswith("/api"):
         # 2. Authentication Check
         provided_key = request.headers.get("X-API-Key")
         if not provided_key:
@@ -213,22 +288,41 @@ async def security_middleware(request: Request, call_next):
         if not provided_key:
             provided_key = request.query_params.get("token") or request.query_params.get("api_key")
             
-        if SYSAWARE_API_KEY:
-            sysaware_admin_key = os.getenv("SYSAWARE_ADMIN_KEY") or SYSAWARE_API_KEY
-            if provided_key != SYSAWARE_API_KEY and provided_key != sysaware_admin_key:
-                return JSONResponse(
-                    status_code=401,
-                    content={"detail": "Unauthorized: Invalid or missing API key."}
-                )
-                
-            # If it is an admin route, check admin key
-            is_admin_route = any(path.startswith(r) for r in ADMIN_ROUTES)
-            if is_admin_route:
-                if provided_key != sysaware_admin_key:
+        # Check stream token first if it is /api/telemetry/stream
+        is_authenticated = False
+        if path == "/api/telemetry/stream" and provided_key:
+            now = time.time()
+            expired = [t for t, exp in _STREAM_TOKENS.items() if now > exp]
+            for t in expired:
+                _STREAM_TOKENS.pop(t, None)
+            if provided_key in _STREAM_TOKENS:
+                _STREAM_TOKENS.pop(provided_key, None)
+                is_authenticated = True
+
+        if not is_authenticated:
+            if SYSAWARE_API_KEY:
+                admin_key = SYSAWARE_ADMIN_KEY or SYSAWARE_API_KEY
+                is_valid = False
+                if provided_key:
+                    if provided_key == SYSAWARE_API_KEY:
+                        is_valid = True
+                    elif admin_key and provided_key == admin_key:
+                        is_valid = True
+
+                if not is_valid:
                     return JSONResponse(
-                        status_code=403,
-                        content={"detail": "Forbidden: Admin privileges required."}
+                        status_code=401,
+                        content={"detail": "Unauthorized: Invalid or missing API key."}
                     )
+                
+                # If it is an admin route, check admin key
+                is_admin_route = any(path.startswith(r) for r in ADMIN_ROUTES)
+                if is_admin_route:
+                    if not provided_key or provided_key != admin_key:
+                        return JSONResponse(
+                            status_code=403,
+                            content={"detail": "Forbidden: Admin privileges required."}
+                        )
 
         # 3. Rate Limiting Check
         if any(path.startswith(r) for r in EXPENSIVE_ROUTES):
@@ -475,6 +569,13 @@ async def ingest_telemetry(report: TelemetryReport):
         return {"status": "success"}
     except Exception as e:
         handle_api_exception(e)
+
+@app.post("/api/auth/stream-token")
+async def generate_stream_token():
+    import secrets
+    token = "stream_" + secrets.token_hex(16)
+    _STREAM_TOKENS[token] = time.time() + 30.0
+    return {"token": token}
 
 @app.get("/api/telemetry/stream")
 async def stream_telemetry():
@@ -897,17 +998,22 @@ async def autotune_stream_endpoint(req: AutotuneRequest):
         raise HTTPException(status_code=503, detail="Server is busy. Max concurrent model tasks reached.")
     
     async def event_generator():
+        start_time = time.time()
         try:
             model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
             gen = at.autotune_generator(model_obj, req.system_profile, req.goal)
             while True:
+                if time.time() - start_time > 600:
+                    yield f"data: {json.dumps({'status': 'error', 'detail': 'Job execution timed out'})}\n\n"
+                    break
                 try:
                     update = await anyio.to_thread.run_sync(next, gen)
                     yield f"data: {json.dumps(update)}\n\n"
                 except StopIteration:
                     break
                 except Exception as e:
-                    yield f"data: {json.dumps({'status': 'error', 'detail': str(e)})}\n\n"
+                    detail_msg = "An error occurred during autotuning" if IS_PRODUCTION else str(e)
+                    yield f"data: {json.dumps({'status': 'error', 'detail': detail_msg})}\n\n"
                     break
         finally:
             await model_concurrency.release()
@@ -921,10 +1027,14 @@ async def diagnose_custom_stream(req: DiagnosticRequest):
         raise HTTPException(status_code=503, detail="Server is busy. Max concurrent model tasks reached.")
     
     async def event_generator():
+        start_time = time.time()
         try:
             model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
             gen = diag.diagnostic_generator(model_obj)
             while True:
+                if time.time() - start_time > 300:
+                    yield f"data: {json.dumps({'status': 'error', 'detail': 'Job execution timed out'})}\n\n"
+                    break
                 def safe_next():
                     try:
                         return next(gen)
@@ -936,7 +1046,8 @@ async def diagnose_custom_stream(req: DiagnosticRequest):
                         break
                     yield f"data: {json.dumps(update)}\n\n"
                 except Exception as e:
-                    yield f"data: {json.dumps({'status': 'error', 'detail': str(e)})}\n\n"
+                    detail_msg = "An error occurred during diagnostics" if IS_PRODUCTION else str(e)
+                    yield f"data: {json.dumps({'status': 'error', 'detail': detail_msg})}\n\n"
                     break
         finally:
             await model_concurrency.release()
@@ -947,8 +1058,12 @@ async def diagnose_custom_stream(req: DiagnosticRequest):
 async def tune_runtime_stream(req: RuntimeTuneRequest):
     try:
         async def event_generator():
+            start_time = time.time()
             gen = tuner.runtime_tune_generator(req.model_id, req.source, req.system_profile)
             while True:
+                if time.time() - start_time > 300:
+                    yield f"data: {json.dumps({'status': 'error', 'detail': 'Job execution timed out'})}\n\n"
+                    break
                 def safe_next():
                     try:
                         return next(gen)
@@ -960,7 +1075,8 @@ async def tune_runtime_stream(req: RuntimeTuneRequest):
                         break
                     yield f"data: {json.dumps(update)}\n\n"
                 except Exception as e:
-                    yield f"data: {json.dumps({'status': 'error', 'detail': str(e)})}\n\n"
+                    detail_msg = "An error occurred during runtime tuning" if IS_PRODUCTION else str(e)
+                    yield f"data: {json.dumps({'status': 'error', 'detail': detail_msg})}\n\n"
                     break
         return StreamingResponse(event_generator(), media_type="text/event-stream")
     except Exception as e:
@@ -989,9 +1105,13 @@ async def chat_stream(req: ChatRequest):
         messages = [{"role": m.role, "content": msg_content_filter(m.content)} for m in req.messages]
         
         async def event_generator():
+            start_time = time.time()
             try:
                 gen = client.chat_stream(messages, req.model_id)
                 while True:
+                    if time.time() - start_time > 120:
+                        yield f"data: {json.dumps({'error': 'Job execution timed out'})}\n\n"
+                        break
                     def safe_next():
                         try:
                             return next(gen)
@@ -1003,7 +1123,8 @@ async def chat_stream(req: ChatRequest):
                             break
                         yield f"data: {json.dumps(update)}\n\n"
                     except Exception as e:
-                        yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                        detail_msg = "An error occurred during chat processing" if IS_PRODUCTION else str(e)
+                        yield f"data: {json.dumps({'error': detail_msg})}\n\n"
                         break
                 
                 yield f"data: {json.dumps({'status': 'done'})}\n\n"

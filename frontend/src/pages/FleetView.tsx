@@ -124,11 +124,24 @@ export const FleetView = () => {
     let eventSource: EventSource | null = null;
     let reconnectTimeout: number;
 
-    const connectStream = () => {
+    const connectStream = async () => {
       if (eventSource) eventSource.close();
       
-      const apiKey = localStorage.getItem('sysaware_api_key');
-      const url = apiKey ? `/api/telemetry/stream?token=${encodeURIComponent(apiKey)}` : '/api/telemetry/stream';
+      let token = '';
+      try {
+        const apiKey = sessionStorage.getItem('sysaware_api_key');
+        if (apiKey) {
+          const res = await fetch('/api/auth/stream-token', { method: 'POST' });
+          if (res.ok) {
+            const data = await res.json();
+            token = data.token;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to retrieve short-lived stream token:", e);
+      }
+
+      const url = token ? `/api/telemetry/stream?token=${encodeURIComponent(token)}` : '/api/telemetry/stream';
       eventSource = new EventSource(url);
       
       eventSource.onopen = () => {

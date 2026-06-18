@@ -12,7 +12,7 @@ window.fetch = async function (input, init) {
     init = init || {};
     init.headers = init.headers || {};
     
-    const apiKey = localStorage.getItem('sysaware_api_key');
+    const apiKey = sessionStorage.getItem('sysaware_api_key');
     if (apiKey) {
       if (init.headers instanceof Headers) {
         init.headers.set('X-API-Key', apiKey);
@@ -33,10 +33,10 @@ window.fetch = async function (input, init) {
   const response = await originalFetch(input, init);
   
   // Intercept 401 Unauthorized to prompt for API Key
-  if (response.status === 401 && (url.startsWith('/api/') || url.includes('/api/')) && !url.includes('/api/system')) {
+  if (response.status === 401 && (url.startsWith('/api/') || url.includes('/api/'))) {
     const newKey = prompt('Unauthorized: Please enter your SysAware API Key to continue:');
     if (newKey) {
-      localStorage.setItem('sysaware_api_key', newKey.trim());
+      sessionStorage.setItem('sysaware_api_key', newKey.trim());
       // Retry the request once
       return window.fetch(input, init);
     }
