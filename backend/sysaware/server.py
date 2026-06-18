@@ -54,6 +54,8 @@ app = FastAPI(title="SysAware ML Optimizer API", lifespan=lifespan)
 # --- Configuration & Security ---
 ENV = os.getenv("ENV") or os.getenv("SYSAWARE_ENV") or "development"
 IS_PRODUCTION = ENV.lower() == "production"
+IS_DEV = ENV.lower() == "development"
+IS_TEST = ENV.lower() == "test"
 
 # 2. Host Bind Config
 SYSAWARE_BIND = os.getenv("SYSAWARE_BIND", "127.0.0.1")
@@ -61,9 +63,7 @@ SYSAWARE_BIND = os.getenv("SYSAWARE_BIND", "127.0.0.1")
 # 1. API Authentication Key
 SYSAWARE_API_KEY = os.getenv("SYSAWARE_API_KEY")
 if not SYSAWARE_API_KEY:
-    if IS_PRODUCTION:
-        raise RuntimeError("PRODUCTION SECURITY ERROR: SYSAWARE_API_KEY is not set in environment.")
-    else:
+    if IS_DEV:
         import secrets
         SYSAWARE_API_KEY = "sysaware_" + secrets.token_hex(16)
         is_loopback = SYSAWARE_BIND.strip().lower() in ["127.0.0.1", "localhost", "::1"]
@@ -76,13 +76,15 @@ if not SYSAWARE_API_KEY:
             print("!" * 60 + "\n")
         else:
             raise RuntimeError("SECURITY ERROR: Auto-generated API key cannot be used when bound to a non-loopback interface.")
+    elif IS_TEST and os.getenv("SYSAWARE_DISABLE_AUTH_FOR_TESTS") == "true":
+        SYSAWARE_API_KEY = None
+    else:
+        raise RuntimeError(f"SECURITY ERROR: SYSAWARE_API_KEY is not set in environment (ENV={ENV}).")
 
 # 1b. Admin key separation
 SYSAWARE_ADMIN_KEY = os.getenv("SYSAWARE_ADMIN_KEY")
 if not SYSAWARE_ADMIN_KEY:
-    if IS_PRODUCTION:
-        raise RuntimeError("PRODUCTION SECURITY ERROR: SYSAWARE_ADMIN_KEY is not set in environment.")
-    else:
+    if IS_DEV:
         import secrets
         SYSAWARE_ADMIN_KEY = "sysaware_admin_" + secrets.token_hex(16)
         is_loopback = SYSAWARE_BIND.strip().lower() in ["127.0.0.1", "localhost", "::1"]
@@ -95,6 +97,10 @@ if not SYSAWARE_ADMIN_KEY:
             print("!" * 60 + "\n")
         else:
             raise RuntimeError("SECURITY ERROR: Auto-generated ADMIN key cannot be used when bound to a non-loopback interface.")
+    elif IS_TEST and os.getenv("SYSAWARE_DISABLE_AUTH_FOR_TESTS") == "true":
+        SYSAWARE_ADMIN_KEY = None
+    else:
+        raise RuntimeError(f"SECURITY ERROR: SYSAWARE_ADMIN_KEY is not set in environment (ENV={ENV}).")
 
 # 3. CORS Origins
 cors_origins_env = os.getenv("SYSAWARE_CORS_ORIGINS")
@@ -321,12 +327,11 @@ async def security_middleware(request: Request, call_next):
 
         if not is_authenticated:
             if SYSAWARE_API_KEY:
-                admin_key = SYSAWARE_ADMIN_KEY or SYSAWARE_API_KEY
                 is_valid = False
                 if provided_key:
                     if provided_key == SYSAWARE_API_KEY:
                         is_valid = True
-                    elif admin_key and provided_key == admin_key:
+                    elif SYSAWARE_ADMIN_KEY and provided_key == SYSAWARE_ADMIN_KEY:
                         is_valid = True
 
                 if not is_valid:
@@ -338,7 +343,7 @@ async def security_middleware(request: Request, call_next):
                 # If it is an admin route, check admin key
                 is_admin_route = any(path.startswith(r) for r in ADMIN_ROUTES)
                 if is_admin_route:
-                    if not provided_key or provided_key != admin_key:
+                    if not provided_key or not SYSAWARE_ADMIN_KEY or provided_key != SYSAWARE_ADMIN_KEY:
                         return JSONResponse(
                             status_code=403,
                             content={"detail": "Forbidden: Admin privileges required."}
@@ -409,6 +414,102 @@ def handle_api_exception(e: Exception):
         raise HTTPException(status_code=500, detail="An internal server error occurred.")
     else:
         raise HTTPException(status_code=500, detail=str(e))
+
+def worker_wrapper(func_name, args, queue):
+    """
+    Subprocess worker target. Resolves func_name to the actual helper function,
+    runs the generator, puts its items into queue, and handles errors.
+    """
+    try:
+        if func_name == "autotune_worker":
+            func = autotune_worker
+        elif func_name == "diagnose_worker":
+            func = diagnose_worker
+        elif func_name == "tune_runtime_worker":
+            func = tune_runtime_worker
+        elif func_name == "chat_worker":
+            func = chat_worker
+        else:
+            raise ValueError(f"Unknown worker function: {func_name}")
+
+        gen = func(*args)
+        for item in gen:
+            queue.put(("next", item))
+        queue.put(("done", None))
+    except Exception as e:
+        queue.put(("error", str(e)))
+
+def autotune_worker(model_path, unsafe_load, system_profile, goal):
+    model_obj = load_model_from_path(model_path, unsafe_load)
+    import sysaware.core.autotuner as at
+    return at.autotune_generator(model_obj, system_profile, goal)
+
+def diagnose_worker(model_path, unsafe_load):
+    model_obj = load_model_from_path(model_path, unsafe_load)
+    import sysaware.core.diagnostic as diag
+    return diag.diagnostic_generator(model_obj)
+
+def tune_runtime_worker(model_id, source, system_profile):
+    import sysaware.core.tuner as tuner
+    return tuner.runtime_tune_generator(model_id, source, system_profile)
+
+def chat_worker(port, host, messages, model_id):
+    import sysaware.core.ollama as ollama
+    import sysaware.core.lmstudio as lms
+    if port == 11434:
+        client = ollama.OllamaClient(host=host, port=port)
+    else:
+        client = lms.LMStudioClient(host=host, port=port)
+    return client.chat_stream(messages, model_id)
+
+async def run_generator_in_process(timeout_seconds, func_name, args):
+    import multiprocessing
+    import anyio
+    
+    ctx = multiprocessing.get_context("spawn")
+    queue = ctx.Queue()
+    process = ctx.Process(target=worker_wrapper, args=(func_name, args, queue))
+    process.start()
+    
+    start_time = time.time()
+    try:
+        while True:
+            remaining = timeout_seconds - (time.time() - start_time)
+            if remaining <= 0:
+                raise TimeoutError()
+            
+            # Read from queue in a thread pool to avoid blocking the main event loop
+            def read_queue():
+                try:
+                    return queue.get(timeout=max(0.1, remaining))
+                except Exception:
+                    return None
+            
+            res = await anyio.to_thread.run_sync(read_queue)
+            if res is None:
+                if not process.is_alive():
+                    if process.exitcode != 0:
+                        raise RuntimeError(f"Worker process exited with code {process.exitcode}")
+                    break
+                continue
+                
+            status, value = res
+            if status == "next":
+                yield value
+            elif status == "done":
+                break
+            elif status == "error":
+                raise RuntimeError(value)
+    except TimeoutError:
+        yield {"status": "error", "detail": "Job execution timed out", "error": "Job execution timed out"}
+    except Exception as e:
+        yield {"status": "error", "detail": str(e), "error": str(e)}
+    finally:
+        if process.is_alive():
+            process.kill()
+            process.join(timeout=1.0)
+            if process.is_alive():
+                process.terminate()
 
 # Initialize DB
 store.init_db()
@@ -1028,21 +1129,15 @@ async def autotune_stream_endpoint(req: AutotuneRequest):
     
     async def event_generator():
         try:
-            async with asyncio.timeout(AUTOTUNE_STREAM_TIMEOUT):
-                model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
-                gen = at.autotune_generator(model_obj, req.system_profile, req.goal)
-                while True:
-                    try:
-                        update = await anyio.to_thread.run_sync(next, gen)
-                        yield f"data: {json.dumps(update)}\n\n"
-                    except StopIteration:
-                        break
-                    except Exception as e:
-                        detail_msg = "An error occurred during autotuning" if IS_PRODUCTION else str(e)
-                        yield f"data: {json.dumps({'status': 'error', 'detail': detail_msg})}\n\n"
-                        break
-        except TimeoutError:
-            yield f"data: {json.dumps({'status': 'error', 'detail': 'Job execution timed out'})}\n\n"
+            args = (req.model_path, req.unsafe_load, req.system_profile, req.goal)
+            async for update in run_generator_in_process(AUTOTUNE_STREAM_TIMEOUT, "autotune_worker", args):
+                if isinstance(update, dict) and "detail" in update and update.get("status") == "error":
+                    detail = update["detail"]
+                    if IS_PRODUCTION and "timed out" not in detail:
+                        detail = "An error occurred during autotuning"
+                    yield f"data: {json.dumps({'status': 'error', 'detail': detail})}\n\n"
+                else:
+                    yield f"data: {json.dumps(update)}\n\n"
         finally:
             await model_concurrency.release()
 
@@ -1056,26 +1151,15 @@ async def diagnose_custom_stream(req: DiagnosticRequest):
     
     async def event_generator():
         try:
-            async with asyncio.timeout(DIAGNOSTIC_STREAM_TIMEOUT):
-                model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
-                gen = diag.diagnostic_generator(model_obj)
-                while True:
-                    def safe_next():
-                        try:
-                            return next(gen)
-                        except StopIteration:
-                            return None
-                    try:
-                        update = await anyio.to_thread.run_sync(safe_next)
-                        if update is None:
-                            break
-                        yield f"data: {json.dumps(update)}\n\n"
-                    except Exception as e:
-                        detail_msg = "An error occurred during diagnostics" if IS_PRODUCTION else str(e)
-                        yield f"data: {json.dumps({'status': 'error', 'detail': detail_msg})}\n\n"
-                        break
-        except TimeoutError:
-            yield f"data: {json.dumps({'status': 'error', 'detail': 'Job execution timed out'})}\n\n"
+            args = (req.model_path, req.unsafe_load)
+            async for update in run_generator_in_process(DIAGNOSTIC_STREAM_TIMEOUT, "diagnose_worker", args):
+                if isinstance(update, dict) and "detail" in update and update.get("status") == "error":
+                    detail = update["detail"]
+                    if IS_PRODUCTION and "timed out" not in detail:
+                        detail = "An error occurred during diagnostics"
+                    yield f"data: {json.dumps({'status': 'error', 'detail': detail})}\n\n"
+                else:
+                    yield f"data: {json.dumps(update)}\n\n"
         finally:
             await model_concurrency.release()
             
@@ -1085,26 +1169,15 @@ async def diagnose_custom_stream(req: DiagnosticRequest):
 async def tune_runtime_stream(req: RuntimeTuneRequest):
     try:
         async def event_generator():
-            try:
-                async with asyncio.timeout(RUNNER_TUNE_STREAM_TIMEOUT):
-                    gen = tuner.runtime_tune_generator(req.model_id, req.source, req.system_profile)
-                    while True:
-                        def safe_next():
-                            try:
-                                return next(gen)
-                            except StopIteration:
-                                return None
-                        try:
-                            update = await anyio.to_thread.run_sync(safe_next)
-                            if update is None:
-                                break
-                            yield f"data: {json.dumps(update)}\n\n"
-                        except Exception as e:
-                            detail_msg = "An error occurred during runtime tuning" if IS_PRODUCTION else str(e)
-                            yield f"data: {json.dumps({'status': 'error', 'detail': detail_msg})}\n\n"
-                            break
-            except TimeoutError:
-                yield f"data: {json.dumps({'status': 'error', 'detail': 'Job execution timed out'})}\n\n"
+            args = (req.model_id, req.source, req.system_profile)
+            async for update in run_generator_in_process(RUNNER_TUNE_STREAM_TIMEOUT, "tune_runtime_worker", args):
+                if isinstance(update, dict) and "detail" in update and update.get("status") == "error":
+                    detail = update["detail"]
+                    if IS_PRODUCTION and "timed out" not in detail:
+                        detail = "An error occurred during runtime tuning"
+                    yield f"data: {json.dumps({'status': 'error', 'detail': detail})}\n\n"
+                else:
+                    yield f"data: {json.dumps(update)}\n\n"
         return StreamingResponse(event_generator(), media_type="text/event-stream")
     except Exception as e:
         handle_api_exception(e)
@@ -1125,35 +1198,30 @@ async def chat_stream(req: ChatRequest):
         raise HTTPException(status_code=503, detail="Server is busy. Max concurrent chat streams reached.")
     
     try:
-        if req.port == 11434:
-            client = ollama.OllamaClient(host=req.host, port=req.port)
-        else:
-            client = lms.LMStudioClient(host=req.host, port=req.port)
         messages = [{"role": m.role, "content": msg_content_filter(m.content)} for m in req.messages]
         
         async def event_generator():
             try:
-                async with asyncio.timeout(CHAT_STREAM_TIMEOUT):
-                    gen = client.chat_stream(messages, req.model_id)
-                    while True:
-                        def safe_next():
-                            try:
-                                return next(gen)
-                            except StopIteration:
-                                return None
-                        try:
-                            update = await anyio.to_thread.run_sync(safe_next)
-                            if update is None:
-                                break
-                            yield f"data: {json.dumps(update)}\n\n"
-                        except Exception as e:
-                            detail_msg = "An error occurred during chat processing" if IS_PRODUCTION else str(e)
-                            yield f"data: {json.dumps({'error': detail_msg})}\n\n"
-                            break
-                    
+                args = (req.port, req.host, messages, req.model_id)
+                has_error = False
+                async for update in run_generator_in_process(CHAT_STREAM_TIMEOUT, "chat_worker", args):
+                    if isinstance(update, dict) and "error" in update:
+                        has_error = True
+                        detail = update["error"]
+                        if IS_PRODUCTION and "timed out" not in detail:
+                            detail = "An error occurred during chat processing"
+                        yield f"data: {json.dumps({'error': detail})}\n\n"
+                    elif isinstance(update, dict) and "detail" in update and update.get("status") == "error":
+                        has_error = True
+                        detail = update["detail"]
+                        if IS_PRODUCTION and "timed out" not in detail:
+                            detail = "An error occurred during chat processing"
+                        yield f"data: {json.dumps({'error': detail})}\n\n"
+                    else:
+                        yield f"data: {json.dumps(update)}\n\n"
+                
+                if not has_error:
                     yield f"data: {json.dumps({'status': 'done'})}\n\n"
-            except TimeoutError:
-                yield f"data: {json.dumps({'error': 'Job execution timed out'})}\n\n"
             finally:
                 await chat_concurrency.release()
 

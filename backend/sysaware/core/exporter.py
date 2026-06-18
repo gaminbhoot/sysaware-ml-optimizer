@@ -83,16 +83,22 @@ class InferenceResponse(BaseModel):
     latency_ms: float
 
 # API Key / Bearer Authentication Middleware
+ENV = os.getenv("ENV") or os.getenv("SYSAWARE_ENV") or "production"
+IS_PRODUCTION = ENV.lower() == "production"
+
 SYSAWARE_API_KEY = os.getenv("SYSAWARE_API_KEY")
 if not SYSAWARE_API_KEY:
-    import secrets
-    SYSAWARE_API_KEY = "sysaware_runner_" + secrets.token_hex(16)
-    print("\\n" + "!" * 60)
-    print("WARNING: No SYSAWARE_API_KEY was provided.")
-    print("Generated a secure random API key for this runner:")
-    print("  " + SYSAWARE_API_KEY)
-    print("Please set SYSAWARE_API_KEY in your environment to use a persistent key.")
-    print("!" * 60 + "\\n")
+    if IS_PRODUCTION:
+        raise RuntimeError("PRODUCTION SECURITY ERROR: SYSAWARE_API_KEY is not set in environment.")
+    else:
+        import secrets
+        SYSAWARE_API_KEY = "sysaware_runner_" + secrets.token_hex(16)
+        print("\\n" + "!" * 60)
+        print("WARNING: No SYSAWARE_API_KEY was provided in development/test environment.")
+        print("Generated a secure random API key for this runner:")
+        print("  " + SYSAWARE_API_KEY)
+        print("Please set SYSAWARE_API_KEY in your environment to use a persistent key.")
+        print("!" * 60 + "\\n")
 
 @app.middleware("http")
 async def verify_auth(request: Request, call_next):
