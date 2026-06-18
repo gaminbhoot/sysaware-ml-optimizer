@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Cpu, Activity, Layers, MessageSquare, Server } from 'lucide-react';
+import { Cpu, Activity, Layers, MessageSquare, Server, Key } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion } from 'framer-motion';
 
@@ -14,6 +14,15 @@ export const Sidebar = () => {
   const location = useLocation();
 
   if (location.pathname === '/') return null; // Hide on Home page (The Void)
+
+  const handleSetKey = () => {
+    const currentKey = localStorage.getItem('sysaware_api_key') || '';
+    const newKey = prompt('Configure SysAware API Key:', currentKey);
+    if (newKey !== null) {
+      localStorage.setItem('sysaware_api_key', newKey.trim());
+      window.location.reload();
+    }
+  };
 
   return (
     <>
@@ -54,6 +63,17 @@ export const Sidebar = () => {
             );
           })}
         </nav>
+
+        {/* API Key button */}
+        <div className="mt-auto pt-8">
+          <button
+            onClick={handleSetKey}
+            className="w-10 h-10 rounded-full bg-white/[0.03] border border-white/10 flex items-center justify-center hover:bg-white/[0.08] hover:text-emerald transition-all text-white/40"
+            title="Configure API Key"
+          >
+            <Key size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Mobile Bottom Bar */}
@@ -88,6 +108,13 @@ export const Sidebar = () => {
             </NavLink>
           );
         })}
+        <button
+          onClick={handleSetKey}
+          className="relative flex flex-col items-center justify-center flex-1 py-1 text-white/30 hover:text-white/50"
+        >
+          <Key size={18} />
+          <span className="text-[10px] mt-1 font-medium text-white/30">API Key</span>
+        </button>
       </div>
     </>
   );

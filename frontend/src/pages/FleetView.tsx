@@ -127,7 +127,9 @@ export const FleetView = () => {
     const connectStream = () => {
       if (eventSource) eventSource.close();
       
-      eventSource = new EventSource('/api/telemetry/stream');
+      const apiKey = localStorage.getItem('sysaware_api_key');
+      const url = apiKey ? `/api/telemetry/stream?token=${encodeURIComponent(apiKey)}` : '/api/telemetry/stream';
+      eventSource = new EventSource(url);
       
       eventSource.onopen = () => {
         setIsConnected(true);

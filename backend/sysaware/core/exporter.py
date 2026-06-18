@@ -12,16 +12,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
     curl \\
     && rm -rf /var/lib/apt/lists/*
 
+# Add non-root user for security compliance
+RUN groupadd -g 1000 sysaware && useradd -u 1000 -g sysaware -m -s /bin/bash sysaware
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Adjust permissions and run as non-root
+RUN chown -R sysaware:sysaware /app
+USER sysaware
+
 # Senior ML Engineer Best Practice: Health Check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \\
   CMD curl -f http://localhost:8000/health || exit 1
 
-ENTRYPOINT ["uvicorn", "runner:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["uvicorn", "runner:app", "--host", "127.0.0.1", "--port", "8000"]
 """
 
 DOCKERFILE_CUDA = """FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
@@ -34,19 +41,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
     curl \\
     && rm -rf /var/lib/apt/lists/*
 
+# Add non-root user for security compliance
+RUN groupadd -g 1000 sysaware && useradd -u 1000 -g sysaware -m -s /bin/bash sysaware
+
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Adjust permissions and run as non-root
+RUN chown -R sysaware:sysaware /app
+USER sysaware
+
 # Senior ML Engineer Best Practice: Health Check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \\
   CMD curl -f http://localhost:8000/health || exit 1
 
-ENTRYPOINT ["uvicorn", "runner:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["uvicorn", "runner:app", "--host", "127.0.0.1", "--port", "8000"]
 """
 
-RUNNER_TEMPLATE = """from fastapi import FastAPI, HTTPException
+RUNNER_TEMPLATE = """from fastapi import FastAPI, HTTPException, Request
 import torch
 import os
 import time
@@ -67,6 +81,26 @@ class InferenceRequest(BaseModel):
 class InferenceResponse(BaseModel):
     prediction: List[float]
     latency_ms: float
+
+# API Key / Bearer Authentication Middleware
+SYSAWARE_API_KEY = os.getenv("SYSAWARE_API_KEY")
+
+@app.middleware("http")
+async def verify_auth(request: Request, call_next):
+    # Only enforce if API Key is configured in environment
+    if SYSAWARE_API_KEY:
+        provided_key = request.headers.get("X-API-Key")
+        if not provided_key:
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                provided_key = auth_header[7:]
+        if provided_key != SYSAWARE_API_KEY:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=401,
+                content={{"detail": "Unauthorized: Invalid or missing API key."}}
+            )
+    return await call_next(request)
 
 @app.on_event("startup")
 def load_model():
@@ -119,14 +153,15 @@ async def predict(request: InferenceRequest):
             output = MODEL(input_tensor)
             prediction = output.tolist()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Inference processing failed")
     
     latency = (time.time() - start_time) * 1000
     return InferenceResponse(prediction=prediction, latency_ms=latency)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    bind_host = os.getenv("SYSAWARE_BIND", "127.0.0.1")
+    uvicorn.run(app, host=bind_host, port=8000)
 """
 
 SYSTEMD_TEMPLATE = """[Unit]
@@ -135,7 +170,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=sysaware
 WorkingDirectory={work_dir}
 Environment=MODEL_PATH={model_path}
 ExecStart=/usr/bin/python3 {work_dir}/runner.py

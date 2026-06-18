@@ -211,6 +211,15 @@ def add_to_blacklist(machine_id, backend, reason):
             INSERT INTO blacklist (machine_id, backend, reason, timestamp)
             VALUES (?, ?, ?, ?)
         """, (machine_id, backend, reason, now))
+        # Keep only the last 500 blacklist entries to prevent unbounded growth
+        cursor.execute("""
+            DELETE FROM blacklist 
+            WHERE id NOT IN (
+                SELECT id FROM blacklist 
+                ORDER BY timestamp DESC 
+                LIMIT 500
+            )
+        """)
         conn.commit()
 
 def get_blacklist():
@@ -239,6 +248,15 @@ def insert_telemetry(machine_id, hardware_profile, goal, latency_range, memory_m
             now,
             now
         ))
+        # Keep only the last 5000 telemetry records to prevent database bloat
+        cursor.execute("""
+            DELETE FROM telemetry 
+            WHERE id NOT IN (
+                SELECT id FROM telemetry 
+                ORDER BY timestamp DESC 
+                LIMIT 5000
+            )
+        """)
         conn.commit()
 
 def get_recent_telemetry(limit=50, offset=0):

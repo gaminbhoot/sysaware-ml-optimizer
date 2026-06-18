@@ -39,13 +39,25 @@ logger = get_logger("sysaware.cli")
 # Global flag to enable heartbeat/telemetry after approval
 IS_APPROVED = False
 
+def _get_headers() -> dict[str, str]:
+	"""Helper to build API headers including X-API-Key and X-Machine-ID."""
+	import os
+	import platform
+	headers = {
+		"X-Machine-ID": f"{platform.node()}_{platform.system()}"
+	}
+	api_key = os.getenv("SYSAWARE_API_KEY")
+	if api_key:
+		headers["X-API-Key"] = api_key
+	return headers
+
 def check_approval(server_url: str, machine_id: str):
 	"""Polls the server to see if this node has been approved."""
 	global IS_APPROVED
 	while not IS_APPROVED:
 		try:
 			url = f"{server_url.rstrip('/')}/api/fleet/join/status?machine_id={machine_id}"
-			response = requests.get(url, timeout=5)
+			response = requests.get(url, headers=_get_headers(), timeout=5)
 			if response.status_code == 200:
 				status = response.json().get("status")
 				if status == "approved":
@@ -77,7 +89,7 @@ def start_heartbeat(server_url: str):
 						"hardware_profile": profile,
 						"status": "benchmarking"
 					}
-					requests.post(heartbeat_url, json=payload, timeout=5)
+					requests.post(heartbeat_url, json=payload, headers=_get_headers(), timeout=5)
 				except Exception:
 					pass
 			time.sleep(30)
@@ -95,7 +107,7 @@ def fetch_blacklist(server_url: str) -> list[str]:
 	machine_id = f"{platform.node()}_{platform.system()}"
 	try:
 		blacklist_url = f"{server_url.rstrip('/')}/api/telemetry/blacklist"
-		response = requests.get(blacklist_url, timeout=5)
+		response = requests.get(blacklist_url, headers=_get_headers(), timeout=5)
 		if response.status_code == 200:
 			data = response.json()
 			# Filter blacklist to only include entries relevant to THIS machine
@@ -118,7 +130,7 @@ def report_blacklist(server_url: str, backend: str, reason: str):
 			"backend": backend,
 			"reason": reason
 		}
-		requests.post(blacklist_url, json=payload, timeout=5)
+		requests.post(blacklist_url, json=payload, headers=_get_headers(), timeout=5)
 		logger.info(f"Reported crashing backend '{backend}' to global blacklist")
 	except Exception as e:
 		logger.warning(f"Could not report blacklist entry to {server_url}: {e}")
@@ -209,7 +221,7 @@ def report_telemetry(server_url: str, report: dict[str, Any]) -> None:
 
 	try:
 		ingest_url = f"{server_url.rstrip('/')}/api/telemetry/ingest"
-		response = requests.post(ingest_url, json=payload, timeout=5)
+		response = requests.post(ingest_url, json=payload, headers=_get_headers(), timeout=5)
 		if response.status_code == 200:
 			logger.info(f"Successfully reported telemetry to {ingest_url}")
 		else:
@@ -355,7 +367,7 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
 		if server_url:
 			try:
 				join_url = f"{server_url.rstrip('/')}/api/fleet/join/request"
-				requests.post(join_url, json={"machine_id": machine_id}, timeout=5)
+				requests.post(join_url, json={"machine_id": machine_id}, headers=_get_headers(), timeout=5)
 				
 				# Start heartbeat and approval poller
 				start_heartbeat(server_url)

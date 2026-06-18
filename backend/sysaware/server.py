@@ -51,14 +51,250 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="SysAware ML Optimizer API", lifespan=lifespan)
 
-# CORS: Allow local development
+# --- Configuration & Security ---
+ENV = os.getenv("ENV") or os.getenv("SYSAWARE_ENV") or "development"
+IS_PRODUCTION = ENV.lower() == "production"
+
+# 1. API Authentication Key
+SYSAWARE_API_KEY = os.getenv("SYSAWARE_API_KEY")
+if not SYSAWARE_API_KEY and IS_PRODUCTION:
+    import secrets
+    SYSAWARE_API_KEY = "sysaware_" + secrets.token_hex(16)
+    print("\n" + "!" * 60)
+    print(f"PRODUCTION WARNING: No SYSAWARE_API_KEY was provided.")
+    print(f"Generated a secure random API key for this session:")
+    print(f"  {SYSAWARE_API_KEY}")
+    print("Please set SYSAWARE_API_KEY in your environment to use a persistent key.")
+    print("!" * 60 + "\n")
+
+# 2. Host Bind Config
+SYSAWARE_BIND = os.getenv("SYSAWARE_BIND", "127.0.0.1")
+
+# 3. CORS Origins
+cors_origins_env = os.getenv("SYSAWARE_CORS_ORIGINS")
+if cors_origins_env:
+    CORS_ORIGINS = [orig.strip() for orig in cors_origins_env.split(",") if orig.strip()]
+else:
+    CORS_ORIGINS = [
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
+# 4. Allowed Proxy Hosts
+allowed_proxies_env = os.getenv("SYSAWARE_ALLOWED_PROXIES")
+if allowed_proxies_env:
+    ALLOWED_PROXIES = [h.strip() for h in allowed_proxies_env.split(",") if h.strip()]
+else:
+    ALLOWED_PROXIES = ["127.0.0.1", "localhost"]
+
+# 5. Allowed Model Directories
+allowed_model_dirs_env = os.getenv("SYSAWARE_ALLOWED_MODEL_DIRS")
+if allowed_model_dirs_env:
+    ALLOWED_MODEL_DIRS = [os.path.realpath(d.strip()) for d in allowed_model_dirs_env.split(",") if d.strip()]
+else:
+    # Allow workspace directory and current working directory
+    ALLOWED_MODEL_DIRS = [
+        os.path.realpath(os.getcwd()),
+        os.path.realpath(os.path.dirname(os.path.abspath(__file__)))
+    ]
+
+# 6. Unsafe Load Allow
+SYSAWARE_ALLOW_UNSAFE_LOAD = os.getenv("SYSAWARE_ALLOW_UNSAFE_LOAD", "false").lower() == "true"
+
+# --- CORS Middleware ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Rate Limiting & Concurrency Infrastructure ---
+import collections
+from fastapi.responses import JSONResponse
+
+class SimpleRateLimiter:
+    def __init__(self, requests_per_minute: int = 30):
+        self.requests_per_minute = requests_per_minute
+        self.requests = collections.defaultdict(list) # client_ip -> list of timestamps
+        
+    def is_allowed(self, client_ip: str) -> bool:
+        now = time.time()
+        self.requests[client_ip] = [t for t in self.requests[client_ip] if now - t < 60]
+        if len(self.requests[client_ip]) >= self.requests_per_minute:
+            return False
+        self.requests[client_ip].append(now)
+        return True
+
+expensive_limiter = SimpleRateLimiter(requests_per_minute=20)
+telemetry_limiter = SimpleRateLimiter(requests_per_minute=60)
+general_limiter = SimpleRateLimiter(requests_per_minute=120)
+
+class ConcurrencyTracker:
+    def __init__(self, max_concurrent: int = 5):
+        self.max_concurrent = max_concurrent
+        self.active_count = 0
+        self.lock = asyncio.Lock()
+        
+    async def acquire(self) -> bool:
+        async with self.lock:
+            if self.active_count >= self.max_concurrent:
+                return False
+            self.active_count += 1
+            return True
+            
+    async def release(self):
+        async with self.lock:
+            self.active_count = max(0, self.active_count - 1)
+
+model_concurrency = ConcurrencyTracker(max_concurrent=3)
+chat_concurrency = ConcurrencyTracker(max_concurrent=5)
+
+# --- Payload Size, Rate Limit, and Auth Middlewares ---
+MAX_PAYLOAD_SIZES = {
+    "/api/model/registry": 50 * 1024 * 1024, # 50 MB
+}
+DEFAULT_MAX_PAYLOAD_SIZE = 2 * 1024 * 1024 # 2 MB
+
+EXPENSIVE_ROUTES = [
+    "/api/chat/stream",
+    "/api/diagnose/custom/stream",
+    "/api/optimize/autotune",
+    "/api/optimize/autotune/stream",
+    "/api/model/analyze",
+    "/api/fleet/join/request"
+]
+
+TELEMETRY_ROUTES = [
+    "/api/telemetry/ingest",
+    "/api/telemetry/heartbeat"
+]
+
+ADMIN_ROUTES = [
+    "/api/fleet/join/approve",
+    "/api/fleet/join/reject",
+    "/api/fleet/node",  # delete node
+    "/api/telemetry/history",
+    "/api/telemetry/blacklist"
+]
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    path = request.url.path
+    client_ip = request.client.host if request.client else "unknown"
+    
+    # 1. Payload Size Check
+    if request.method in ["POST", "PUT", "PATCH"]:
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                length = int(content_length)
+                max_size = MAX_PAYLOAD_SIZES.get(path, DEFAULT_MAX_PAYLOAD_SIZE)
+                if length > max_size:
+                    return JSONResponse(
+                        status_code=413,
+                        content={"detail": f"Request payload too large. Max allowed is {max_size} bytes."}
+                    )
+            except ValueError:
+                return JSONResponse(status_code=400, content={"detail": "Invalid Content-Length header"})
+
+    # Only secure /api routes except /api/system
+    if path.startswith("/api") and path != "/api/system":
+        # 2. Authentication Check
+        provided_key = request.headers.get("X-API-Key")
+        if not provided_key:
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                provided_key = auth_header[7:]
+        if not provided_key:
+            provided_key = request.query_params.get("token") or request.query_params.get("api_key")
+            
+        if SYSAWARE_API_KEY:
+            sysaware_admin_key = os.getenv("SYSAWARE_ADMIN_KEY") or SYSAWARE_API_KEY
+            if provided_key != SYSAWARE_API_KEY and provided_key != sysaware_admin_key:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Unauthorized: Invalid or missing API key."}
+                )
+                
+            # If it is an admin route, check admin key
+            is_admin_route = any(path.startswith(r) for r in ADMIN_ROUTES)
+            if is_admin_route:
+                if provided_key != sysaware_admin_key:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "Forbidden: Admin privileges required."}
+                    )
+
+        # 3. Rate Limiting Check
+        if any(path.startswith(r) for r in EXPENSIVE_ROUTES):
+            if not expensive_limiter.is_allowed(client_ip):
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Too many requests. Please slow down on expensive routes."}
+                )
+        elif any(path.startswith(r) for r in TELEMETRY_ROUTES):
+            if not telemetry_limiter.is_allowed(client_ip):
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Telemetry rate limit exceeded."}
+                )
+        else:
+            if not general_limiter.is_allowed(client_ip):
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Rate limit exceeded."}
+                )
+
+    return await call_next(request)
+
+# --- Helper Functions ---
+def is_path_allowed(model_path: str) -> bool:
+    try:
+        resolved_path = os.path.realpath(model_path)
+        for allowed_dir in ALLOWED_MODEL_DIRS:
+            common = os.path.commonpath([resolved_path, allowed_dir])
+            if common == allowed_dir:
+                return True
+        return False
+    except Exception:
+        return False
+
+def validate_model_path_and_load(model_path: str, unsafe_load: bool = False):
+    if not is_path_allowed(model_path):
+        raise HTTPException(status_code=400, detail="Access denied: Model path is outside configured model directories.")
+    if unsafe_load and not SYSAWARE_ALLOW_UNSAFE_LOAD:
+        raise HTTPException(status_code=400, detail="Unsafe model loading is disabled on this server.")
+
+def validate_host_and_port(host: str, port: int):
+    host_clean = host.strip().lower()
+    if host_clean in ALLOWED_PROXIES:
+        return
+    if host_clean in ["localhost", "127.0.0.1", "::1"]:
+        return
+    try:
+        import socket
+        ip = socket.gethostbyname(host_clean)
+        if ip in ["127.0.0.1", "::1"]:
+            return
+    except Exception:
+        pass
+    raise HTTPException(status_code=400, detail=f"Access denied: Host '{host}' is not in the proxy allowlist.")
+
+def handle_api_exception(e: Exception):
+    print(f"API Exception: {e}")
+    import traceback
+    traceback.print_exc()
+    if isinstance(e, HTTPException):
+        raise e
+    if IS_PRODUCTION:
+        raise HTTPException(status_code=500, detail="An internal server error occurred.")
+    else:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Initialize DB
 store.init_db()
@@ -238,7 +474,7 @@ async def ingest_telemetry(report: TelemetryReport):
         })
         return {"status": "success"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.get("/api/telemetry/stream")
 async def stream_telemetry():
@@ -250,7 +486,7 @@ async def get_telemetry_history(limit: int = 50, offset: int = 0):
         history = await anyio.to_thread.run_sync(store.get_recent_telemetry, limit, offset)
         return {"status": "success", "history": history}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.post("/api/model/registry")
 async def register_model(req: ModelRegisterRequest):
@@ -267,7 +503,7 @@ async def register_model(req: ModelRegisterRequest):
         )
         return {"status": "success"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.post("/api/model/drift")
 async def check_drift(req: DriftRequest):
@@ -281,7 +517,7 @@ async def check_drift(req: DriftRequest):
         )
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.delete("/api/telemetry/history")
 async def clear_telemetry(range_type: str = "all"):
@@ -289,13 +525,14 @@ async def clear_telemetry(range_type: str = "all"):
         await anyio.to_thread.run_sync(store.clear_telemetry_history, range_type)
         return {"status": "success"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.post("/api/lmstudio/sync")
 async def sync_lmstudio(req: LMStudioSyncRequest):
     print(f"\n--- LM STUDIO SYNC ATTEMPT ---")
     print(f"Target: {req.host}:{req.port}")
     try:
+        validate_host_and_port(req.host, req.port)
         client = lms.LMStudioClient(host=req.host, port=req.port)
         analysis = await anyio.to_thread.run_sync(client.sync_loaded_model, req.model_id)
         if not analysis:
@@ -310,20 +547,22 @@ async def sync_lmstudio(req: LMStudioSyncRequest):
             raise e
         print(f"Sync Result: UNEXPECTED ERROR - {str(e)}")
         print(f"-------------------------------\n")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.get("/api/lmstudio/models")
 async def list_lmstudio_models(host: str = "127.0.0.1", port: int = 1234):
     try:
+        validate_host_and_port(host, port)
         client = lms.LMStudioClient(host=host, port=port)
         models = await anyio.to_thread.run_sync(client.get_all_models)
         return {"status": "success", "models": models}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.post("/api/lmstudio/load")
 async def load_lmstudio_model(req: ModelLoadRequest):
     try:
+        validate_host_and_port(req.host, req.port)
         client = lms.LMStudioClient(host=req.host, port=req.port)
         success = await anyio.to_thread.run_sync(client.load_model, req.model_id)
         if success:
@@ -331,11 +570,12 @@ async def load_lmstudio_model(req: ModelLoadRequest):
         else:
             raise HTTPException(status_code=500, detail="Failed to load model in LM Studio")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.post("/api/lmstudio/unload")
 async def unload_lmstudio_model(req: UnloadRequest):
     try:
+        validate_host_and_port(req.host, req.port)
         client = lms.LMStudioClient(host=req.host, port=req.port)
         success = await anyio.to_thread.run_sync(client.unload_model, req.model_id)
         if success:
@@ -343,7 +583,7 @@ async def unload_lmstudio_model(req: UnloadRequest):
         else:
             raise HTTPException(status_code=500, detail="Failed to unload model in LM Studio")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 # --- Ollama Endpoints ---
 @app.post("/api/ollama/sync")
@@ -351,6 +591,7 @@ async def sync_ollama(req: OllamaSyncRequest):
     print(f"\n--- OLLAMA SYNC ATTEMPT ---")
     print(f"Target: {req.host}:{req.port}")
     try:
+        validate_host_and_port(req.host, req.port)
         client = ollama.OllamaClient(host=req.host, port=req.port)
         analysis = await anyio.to_thread.run_sync(client.sync_loaded_model, req.model_id)
         if not analysis:
@@ -365,20 +606,22 @@ async def sync_ollama(req: OllamaSyncRequest):
             raise e
         print(f"Sync Result: UNEXPECTED ERROR - {str(e)}")
         print(f"---------------------------\n")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.get("/api/ollama/models")
 async def list_ollama_models(host: str = "127.0.0.1", port: int = 11434):
     try:
+        validate_host_and_port(host, port)
         client = ollama.OllamaClient(host=host, port=port)
         models = await anyio.to_thread.run_sync(client.get_all_models)
         return {"status": "success", "models": models}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.post("/api/ollama/load")
 async def load_ollama_model(req: OllamaLoadRequest):
     try:
+        validate_host_and_port(req.host, req.port)
         client = ollama.OllamaClient(host=req.host, port=req.port)
         success = await anyio.to_thread.run_sync(client.load_model, req.model_id)
         if success:
@@ -386,11 +629,12 @@ async def load_ollama_model(req: OllamaLoadRequest):
         else:
             raise HTTPException(status_code=500, detail="Failed to load model in Ollama")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.post("/api/ollama/unload")
 async def unload_ollama_model(req: OllamaUnloadRequest):
     try:
+        validate_host_and_port(req.host, req.port)
         client = ollama.OllamaClient(host=req.host, port=req.port)
         success = await anyio.to_thread.run_sync(client.unload_model, req.model_id)
         if success:
@@ -398,7 +642,7 @@ async def unload_ollama_model(req: OllamaUnloadRequest):
         else:
             raise HTTPException(status_code=500, detail="Failed to unload model in Ollama")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.get("/api/fleet/active")
 async def get_active_nodes():
@@ -406,7 +650,7 @@ async def get_active_nodes():
         nodes = await anyio.to_thread.run_sync(store.get_active_nodes)
         return {"status": "success", "nodes": nodes}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.delete("/api/fleet/node/{machine_id}")
 async def delete_node(machine_id: str):
@@ -414,7 +658,7 @@ async def delete_node(machine_id: str):
         await anyio.to_thread.run_sync(store.delete_node, machine_id)
         return {"status": "success"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.post("/api/fleet/join/request")
 async def request_join(req: JoinRequest):
@@ -427,7 +671,7 @@ async def request_join(req: JoinRequest):
         })
         return {"status": "pending"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.get("/api/fleet/join/status")
 async def get_join_status(machine_id: str):
@@ -435,23 +679,29 @@ async def get_join_status(machine_id: str):
         status = await anyio.to_thread.run_sync(store.get_node_join_status, machine_id)
         return {"status": status}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.post("/api/fleet/join/approve")
-async def approve_join(req: JoinRequest):
+async def approve_join(req: JoinRequest, request: Request):
     try:
+        caller_machine_id = request.headers.get("X-Machine-ID")
+        if caller_machine_id and caller_machine_id == req.machine_id:
+            raise HTTPException(status_code=400, detail="Nodes cannot approve their own join requests.")
         await anyio.to_thread.run_sync(store.set_node_approval, req.machine_id, True)
         return {"status": "success"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.post("/api/fleet/join/reject")
-async def reject_join(req: JoinRequest):
+async def reject_join(req: JoinRequest, request: Request):
     try:
+        caller_machine_id = request.headers.get("X-Machine-ID")
+        if caller_machine_id and caller_machine_id == req.machine_id:
+            raise HTTPException(status_code=400, detail="Nodes cannot reject their own join requests.")
         await anyio.to_thread.run_sync(store.set_node_approval, req.machine_id, False)
         return {"status": "success"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.post("/api/telemetry/heartbeat")
 async def heartbeat(req: HeartbeatRequest):
@@ -459,7 +709,7 @@ async def heartbeat(req: HeartbeatRequest):
         await anyio.to_thread.run_sync(store.update_heartbeat, req.machine_id, req.hardware_profile, req.status)
         return {"status": "success"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.get("/api/telemetry/blacklist")
 async def get_blacklist():
@@ -467,7 +717,7 @@ async def get_blacklist():
         entries = await anyio.to_thread.run_sync(store.get_blacklist)
         return {"status": "success", "blacklist": entries}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.post("/api/telemetry/blacklist")
 async def add_to_blacklist(entry: BlacklistEntry):
@@ -480,7 +730,7 @@ async def add_to_blacklist(entry: BlacklistEntry):
         })
         return {"status": "success"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.get("/api/system")
 async def get_system():
@@ -488,7 +738,7 @@ async def get_system():
         profile = await anyio.to_thread.run_sync(sp.get_system_profile)
         return {"status": "success", "profile": profile}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.get("/api/model/browse")
 async def browse_model():
@@ -503,6 +753,9 @@ async def browse_model():
             try:
                 result = await anyio.to_thread.run_sync(run_osascript)
                 file_path = result.stdout.strip()
+                # Ensure path is allowed
+                if not is_path_allowed(file_path):
+                    raise HTTPException(status_code=400, detail="Access denied: Model path is outside configured model directories.")
                 return {"status": "success", "path": file_path}
             except subprocess.CalledProcessError as e:
                 return {"status": "cancelled", "detail": e.stderr}
@@ -520,9 +773,11 @@ async def browse_model():
                 except Exception:
                     return ""
             file_path = await anyio.to_thread.run_sync(tk_browse)
+            if file_path and not is_path_allowed(file_path):
+                raise HTTPException(status_code=400, detail="Access denied: Model path is outside configured model directories.")
             return {"status": "success", "path": file_path}
     except Exception as e:
-        return {"status": "error", "detail": str(e)}
+        handle_api_exception(e)
 
 # --- Caching ---
 _analysis_cache = {}
@@ -535,53 +790,71 @@ def get_cached_analysis(model_path: str):
 def set_cached_analysis(model_path: str, analysis: dict):
     mtime = os.path.getmtime(model_path)
     cache_key = f"{model_path}_{mtime}"
-    # Simple LRU-like behavior: clear if too large
     if len(_analysis_cache) > 20:
         _analysis_cache.clear()
     _analysis_cache[cache_key] = analysis
 
 @app.post("/api/model/analyze")
 async def analyze_model_endpoint(req: AnalyzeRequest):
-    if not os.path.exists(req.model_path):
-        raise HTTPException(status_code=404, detail="Model path not found")
+    validate_model_path_and_load(req.model_path, req.unsafe_load)
     
-    cached = get_cached_analysis(req.model_path)
-    if cached:
-        return {"status": "success", "analysis": cached, "cached": True}
-
+    if not os.path.exists(req.model_path):
+        if IS_PRODUCTION:
+            raise HTTPException(status_code=400, detail="Failed to load or analyze model")
+        else:
+            raise HTTPException(status_code=404, detail="Model path not found")
+        
+    if not await model_concurrency.acquire():
+        raise HTTPException(status_code=503, detail="Server is busy. Max concurrent model tasks reached.")
+    
     try:
+        cached = get_cached_analysis(req.model_path)
+        if cached:
+            return {"status": "success", "analysis": cached, "cached": True}
+    
         model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
         analysis = await anyio.to_thread.run_sync(ma.analyze_model, model_obj)
         set_cached_analysis(req.model_path, analysis)
         return {"status": "success", "analysis": analysis}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        if IS_PRODUCTION:
+            print(f"Model analysis failed: {e}")
+            raise HTTPException(status_code=400, detail="Failed to load or analyze model")
+        else:
+            handle_api_exception(e)
+    finally:
+        await model_concurrency.release()
 
 @app.post("/api/model/unload")
 async def unload_model(req: UnloadRequest):
     try:
-        # If the port corresponds to Ollama, unload from Ollama
+        validate_host_and_port(req.host, req.port)
         if req.port == 11434:
             client = ollama.OllamaClient(host=req.host, port=req.port)
             await anyio.to_thread.run_sync(client.unload_model, req.model_id)
             return {"status": "success", "message": f"Model {req.model_id or ''} unloaded from Ollama memory"}
         else:
-            # Otherwise default to LM Studio
             client = lms.LMStudioClient(host=req.host, port=req.port)
             await anyio.to_thread.run_sync(client.unload_model, req.model_id)
             return {"status": "success", "message": f"Model {req.model_id or ''} unloaded from LM Studio memory"}
     except Exception as e:
         print(f"Model Unload failed: {e}")
-        return {"status": "success", "message": "Model unloaded from local memory (Client sync failed)"}
+        # Return failure exception instead of hiding it
+        raise HTTPException(status_code=500, detail=f"Model unload failed: {str(e)}")
 
 @app.post("/api/optimize/baseline")
 async def estimate_baseline(req: BaselineRequest):
+    validate_model_path_and_load(req.model_path, False)
+    if not await model_concurrency.acquire():
+        raise HTTPException(status_code=503, detail="Server is busy. Max concurrent model tasks reached.")
     try:
         model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, False)
         baseline = await anyio.to_thread.run_sync(est.estimate_performance, model_obj, req.system_profile)
         return {"status": "success", "baseline": baseline}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
+    finally:
+        await model_concurrency.release()
 
 @app.post("/api/optimize/strategy")
 async def generate_strategy(req: StrategyRequest):
@@ -589,7 +862,7 @@ async def generate_strategy(req: StrategyRequest):
         strategy = await anyio.to_thread.run_sync(se.get_strategy, req.system_profile, req.goal, req.model_analysis)
         return {"status": "success", "strategy": strategy}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.post("/api/prompt/optimize")
 async def optimize_prompt(req: PromptRequest):
@@ -597,10 +870,13 @@ async def optimize_prompt(req: PromptRequest):
         result = await anyio.to_thread.run_sync(po.optimize_prompt, req.prompt, req.intent)
         return {"status": "success", "result": result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.post("/api/optimize/autotune")
 async def autotune_endpoint(req: AutotuneRequest):
+    validate_model_path_and_load(req.model_path, req.unsafe_load)
+    if not await model_concurrency.acquire():
+        raise HTTPException(status_code=503, detail="Server is busy. Max concurrent model tasks reached.")
     try:
         model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
         best_config, _, best_result = await anyio.to_thread.run_sync(at.autotune, model_obj, req.system_profile, req.goal)
@@ -610,14 +886,19 @@ async def autotune_endpoint(req: AutotuneRequest):
             "best_result": best_result
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
+    finally:
+        await model_concurrency.release()
 
 @app.post("/api/optimize/autotune/stream")
 async def autotune_stream_endpoint(req: AutotuneRequest):
-    try:
-        model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
-        
-        async def event_generator():
+    validate_model_path_and_load(req.model_path, req.unsafe_load)
+    if not await model_concurrency.acquire():
+        raise HTTPException(status_code=503, detail="Server is busy. Max concurrent model tasks reached.")
+    
+    async def event_generator():
+        try:
+            model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
             gen = at.autotune_generator(model_obj, req.system_profile, req.goal)
             while True:
                 try:
@@ -628,16 +909,20 @@ async def autotune_stream_endpoint(req: AutotuneRequest):
                 except Exception as e:
                     yield f"data: {json.dumps({'status': 'error', 'detail': str(e)})}\n\n"
                     break
+        finally:
+            await model_concurrency.release()
 
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @app.post("/api/diagnose/custom/stream")
 async def diagnose_custom_stream(req: DiagnosticRequest):
-    try:
-        model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
-        async def event_generator():
+    validate_model_path_and_load(req.model_path, req.unsafe_load)
+    if not await model_concurrency.acquire():
+        raise HTTPException(status_code=503, detail="Server is busy. Max concurrent model tasks reached.")
+    
+    async def event_generator():
+        try:
+            model_obj = await anyio.to_thread.run_sync(load_model_from_path, req.model_path, req.unsafe_load)
             gen = diag.diagnostic_generator(model_obj)
             while True:
                 def safe_next():
@@ -653,11 +938,10 @@ async def diagnose_custom_stream(req: DiagnosticRequest):
                 except Exception as e:
                     yield f"data: {json.dumps({'status': 'error', 'detail': str(e)})}\n\n"
                     break
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
-    except Exception as e:
-        # If model loading fails, we still want to yield an error in the stream if possible, 
-        # but here we just throw 500 for simplicity as per current pattern.
-        raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            await model_concurrency.release()
+            
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @app.post("/api/tune/runtime/stream")
 async def tune_runtime_stream(req: RuntimeTuneRequest):
@@ -680,7 +964,7 @@ async def tune_runtime_stream(req: RuntimeTuneRequest):
                     break
         return StreamingResponse(event_generator(), media_type="text/event-stream")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.post("/api/estimate/inference")
 async def estimate_inference(req: InferenceEstimateRequest):
@@ -689,14 +973,14 @@ async def estimate_inference(req: InferenceEstimateRequest):
         result["status"] = "success"
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_api_exception(e)
 
 @app.post("/api/chat/stream")
 async def chat_stream(req: ChatRequest):
-    """
-    Unified chat proxy for Ollama, LM Studio, and OLX.
-    Uses the provided host and port to connect to the active backend.
-    """
+    validate_host_and_port(req.host, req.port)
+    if not await chat_concurrency.acquire():
+        raise HTTPException(status_code=503, detail="Server is busy. Max concurrent chat streams reached.")
+    
     try:
         if req.port == 11434:
             client = ollama.OllamaClient(host=req.host, port=req.port)
@@ -705,27 +989,31 @@ async def chat_stream(req: ChatRequest):
         messages = [{"role": m.role, "content": msg_content_filter(m.content)} for m in req.messages]
         
         async def event_generator():
-            gen = client.chat_stream(messages, req.model_id)
-            while True:
-                def safe_next():
+            try:
+                gen = client.chat_stream(messages, req.model_id)
+                while True:
+                    def safe_next():
+                        try:
+                            return next(gen)
+                        except StopIteration:
+                            return None
                     try:
-                        return next(gen)
-                    except StopIteration:
-                        return None
-                try:
-                    update = await anyio.to_thread.run_sync(safe_next)
-                    if update is None:
+                        update = await anyio.to_thread.run_sync(safe_next)
+                        if update is None:
+                            break
+                        yield f"data: {json.dumps(update)}\n\n"
+                    except Exception as e:
+                        yield f"data: {json.dumps({'error': str(e)})}\n\n"
                         break
-                    yield f"data: {json.dumps(update)}\n\n"
-                except Exception as e:
-                    yield f"data: {json.dumps({'error': str(e)})}\n\n"
-                    break
-            
-            yield f"data: {json.dumps({'status': 'done'})}\n\n"
+                
+                yield f"data: {json.dumps({'status': 'done'})}\n\n"
+            finally:
+                await chat_concurrency.release()
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        await chat_concurrency.release()
+        handle_api_exception(e)
 
 def msg_content_filter(content: str) -> str:
     """Optional: strip frontend-only markers if any."""
@@ -1090,4 +1378,4 @@ if __name__ == "__main__":
     print("TIP: For LM Studio sync, ensure 'Local Server' is ON.")
     print("TIP: If telemetry fails, check firewall for Port 8000 (TCP) and 8001 (UDP).")
     print("="*50 + "\n")
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    uvicorn.run(app, host=SYSAWARE_BIND, port=8000, log_level="info")
