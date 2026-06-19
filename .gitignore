@@ -44,6 +44,9 @@ planned_integrations.md
 # Scratch and Temporary files
 temp*.py
 temp*.pt
+test.py
+test.pt
+.self-eval-scores.jsonl
 *.log
 npm-debug.log*
 

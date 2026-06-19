@@ -311,19 +311,22 @@ async def security_middleware(request: Request, call_next):
             auth_header = request.headers.get("Authorization")
             if auth_header and auth_header.startswith("Bearer "):
                 provided_key = auth_header[7:]
-        if not provided_key:
-            provided_key = request.query_params.get("token") or request.query_params.get("api_key")
+
+        # Query parameters should only be checked for short-lived stream tokens on `/api/telemetry/stream`
+        query_key = request.query_params.get("token") or request.query_params.get("api_key")
             
         # Check stream token first if it is /api/telemetry/stream
         is_authenticated = False
-        if path == "/api/telemetry/stream" and provided_key:
-            now = time.time()
-            expired = [t for t, exp in _STREAM_TOKENS.items() if now > exp]
-            for t in expired:
-                _STREAM_TOKENS.pop(t, None)
-            if provided_key in _STREAM_TOKENS:
-                _STREAM_TOKENS.pop(provided_key, None)
-                is_authenticated = True
+        if path == "/api/telemetry/stream":
+            stream_key = provided_key or query_key
+            if stream_key:
+                now = time.time()
+                expired = [t for t, exp in _STREAM_TOKENS.items() if now > exp]
+                for t in expired:
+                    _STREAM_TOKENS.pop(t, None)
+                if stream_key in _STREAM_TOKENS:
+                    _STREAM_TOKENS.pop(stream_key, None)
+                    is_authenticated = True
 
         if not is_authenticated:
             if SYSAWARE_API_KEY:
@@ -393,14 +396,14 @@ def validate_host_and_port(host: str, port: int):
     host_clean = host.strip().lower()
     if host_clean in ALLOWED_PROXIES:
         return
-    if host_clean in ["localhost", "127.0.0.1", "::1"]:
+    if host_clean == "localhost":
         return
+    import ipaddress
     try:
-        import socket
-        ip = socket.gethostbyname(host_clean)
-        if ip in ["127.0.0.1", "::1"]:
+        ip = ipaddress.ip_address(host_clean)
+        if ip.is_loopback:
             return
-    except Exception:
+    except ValueError:
         pass
     raise HTTPException(status_code=400, detail=f"Access denied: Host '{host}' is not in the proxy allowlist.")
 
@@ -516,22 +519,38 @@ store.init_db()
 
 # --- SSE Broker ---
 class EventBroker:
-    def __init__(self):
+    def __init__(self, max_queue_size: int = 100, max_concurrent_streams: int = 20):
         self.listeners = set()
+        self.max_queue_size = max_queue_size
+        self.max_concurrent_streams = max_concurrent_streams
 
     async def subscribe(self):
-        queue = asyncio.Queue()
+        queue = asyncio.Queue(maxsize=self.max_queue_size)
         self.listeners.add(queue)
         try:
             while True:
-                yield await queue.get()
+                msg = await queue.get()
+                if msg is None:
+                    break
+                yield msg
         finally:
-            self.listeners.remove(queue)
+            self.listeners.discard(queue)
 
     async def publish(self, data: dict):
         msg = f"data: {json.dumps(data)}\n\n"
-        for queue in self.listeners:
-            await queue.put(msg)
+        for queue in list(self.listeners):
+            try:
+                queue.put_nowait(msg)
+            except asyncio.QueueFull:
+                # Slow client: discard oldest item to ensure we can enqueue the None disconnect sentinel
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+                try:
+                    queue.put_nowait(None)
+                except asyncio.QueueFull:
+                    self.listeners.discard(queue)
 
 broker = EventBroker()
 
@@ -709,6 +728,8 @@ async def generate_stream_token():
 
 @app.get("/api/telemetry/stream")
 async def stream_telemetry():
+    if len(broker.listeners) >= broker.max_concurrent_streams:
+        raise HTTPException(status_code=429, detail="Too many concurrent telemetry streams.")
     return StreamingResponse(broker.subscribe(), media_type="text/event-stream")
 
 @app.get("/api/telemetry/history")
