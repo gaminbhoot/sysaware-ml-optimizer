@@ -38,14 +38,15 @@ Designed for users running models via runtime backends like **LM Studio**, **Oll
 
 ```text
 sysaware-ml-optimizer/
-├── backend/                # FastAPI server and core logic
-│   ├── core/               # Diagnostic, Tuning, and ML modules
-│   │   ├── diagnostic.py   # Path A logic
-│   │   ├── tuner.py        # Path B logic
-│   │   ├── estimator.py    # tok/s prediction engine
-│   │   └── lmstudio.py     # Live bridge/proxy
-│   ├── server.py           # Central API & Telemetry hub
-│   └── main.py             # CLI worker entry point
+├── backend/                # Backend code
+│   └── sysaware/           # Core backend package
+│       ├── core/           # Diagnostic, Tuning, and ML modules
+│       │   ├── diagnostic.py # Path A logic
+│       │   ├── tuner.py      # Path B logic
+│       │   ├── estimator.py  # tok/s prediction engine
+│       │   └── lmstudio.py   # Live bridge/proxy
+│       ├── server.py       # Central API & Telemetry hub
+│       └── cli.py          # CLI entry point
 ├── frontend/               # Vite + React (TypeScript) dashboard
 ├── data/                   # ML models, benchmark CSVs, and SQLite DB
 ├── scripts/                # Data augmentation and training pipelines
