@@ -1,4 +1,5 @@
 import pytest
+pytest.importorskip("torch")
 from fastapi.testclient import TestClient
 from sysaware.server import app
 import json

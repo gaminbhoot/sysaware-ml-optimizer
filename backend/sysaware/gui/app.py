@@ -2,7 +2,10 @@ import streamlit as st  # type: ignore[import-not-found]
 import os
 import sys
 import gc
-import torch
+try:
+    import torch
+except ImportError:
+    torch = None
 
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))

@@ -1,5 +1,8 @@
 from typing import Any, Generator
-import torch
+try:
+    import torch
+except ImportError:
+    torch = None
 from .logging_utils import get_logger
 
 logger = get_logger("sysaware.diagnostic")
@@ -12,16 +15,17 @@ def diagnostic_generator(model: Any) -> Generator[dict[str, Any], None, None]:
     
     # 1. DType Inefficiency
     has_fp32 = False
-    if hasattr(model, "parameters"):
-        for param in model.parameters():
-            if param.dtype == torch.float32:
-                has_fp32 = True
-                break
-    elif isinstance(model, dict):
-        for val in model.values():
-            if hasattr(val, "dtype") and val.dtype == torch.float32:
-                has_fp32 = True
-                break
+    if torch is not None:
+        if hasattr(model, "parameters"):
+            for param in model.parameters():
+                if param.dtype == torch.float32:
+                    has_fp32 = True
+                    break
+        elif isinstance(model, dict):
+            for val in model.values():
+                if hasattr(val, "dtype") and val.dtype == torch.float32:
+                    has_fp32 = True
+                    break
     
     if has_fp32:
         findings.append({

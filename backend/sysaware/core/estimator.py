@@ -226,13 +226,49 @@ def _run_micro_benchmark(model: Any, profile: dict[str, Any]) -> tuple[tuple[flo
 	confidence = "high" if len(durations) >= 5 else "medium"
 	return (latency_low, latency_high), memory_mb, confidence
 
-import joblib
 import os
-import pandas as pd
 import warnings
 
 def predict_inference_speed(hardware_specs: dict, model_metadata: dict) -> dict:
     """Predicts tok/s using trained regression models."""
+    # Try to import pandas and joblib on demand
+    try:
+        import pandas as pd
+        import joblib
+        has_ml = True
+    except ImportError:
+        has_ml = False
+
+    # Feature engineering
+    mem_bw = hardware_specs.get("memory_bandwidth_gbps", 100.0)
+    vram = hardware_specs.get("vram_gb", 8.0)
+    params = model_metadata.get("params_b", 7.0)
+    bits = model_metadata.get("quant_bits", 4.0)
+    model_size = (params * bits) / 8
+    
+    # Platform detection
+    gpu_name = hardware_specs.get("gpu_name", "").upper()
+    is_apple = 1 if any(x in gpu_name for x in ["M1", "M2", "M3", "M4", "APPLE", "SILICON"]) else 0
+    is_spill = 1 if model_size > (vram * 0.8) else 0
+
+    if not has_ml:
+        # Heuristic fallback if ML packages are missing
+        if is_spill:
+            prediction = 2.0
+            mae = 1.0
+            method = "spill-fallback"
+        else:
+            prediction = float((mem_bw / max(1.0, model_size)) * 0.8)
+            mae = 3.0
+            method = "heuristic-fallback"
+        return {
+            "predicted_tok_s": prediction,
+            "confidence_interval": [max(0.0, prediction - mae), prediction + mae],
+            "method": method,
+            "is_apple": bool(is_apple),
+            "is_ram_spill": bool(is_spill)
+        }
+
     # Load models and metadata on demand
     try:
         with warnings.catch_warnings():
@@ -243,8 +279,23 @@ def predict_inference_speed(hardware_specs: dict, model_metadata: dict) -> dict:
             estimator_spill = None
             if os.path.exists("data/estimator_ramspill.joblib"):
                 estimator_spill = joblib.load("data/estimator_ramspill.joblib")
-    except:
-        return {"error": "Estimator model not loaded", "predicted_tok_s": 0.0}
+    except Exception:
+        # Fallback if joblib load fails (e.g. file missing)
+        if is_spill:
+            prediction = 2.0
+            mae = 1.0
+            method = "spill-fallback"
+        else:
+            prediction = float((mem_bw / max(1.0, model_size)) * 0.8)
+            mae = 3.0
+            method = "heuristic-fallback"
+        return {
+            "predicted_tok_s": prediction,
+            "confidence_interval": [max(0.0, prediction - mae), prediction + mae],
+            "method": method,
+            "is_apple": bool(is_apple),
+            "is_ram_spill": bool(is_spill)
+        }
 
     # Feature engineering
     mem_bw = hardware_specs.get("memory_bandwidth_gbps", 100.0)

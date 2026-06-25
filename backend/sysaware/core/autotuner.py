@@ -85,31 +85,34 @@ def autotune_generator(model: Any, profile: dict[str, Any], goal: str, blacklist
 	if blacklist:
 		logger.info(f"Skipping blacklisted modes: {', '.join([m for m in ['int8', 'fp16'] if m in blacklist])}")
 	
-	yield {"status": "evaluating_parallel", "candidates": modes, "message": f"Evaluating {', '.join(modes)} in parallel..."}
-	
-	with concurrent.futures.ThreadPoolExecutor(max_workers=len(modes)) as executor:
-		future_to_mode = {executor.submit(_evaluate_candidate, model, profile, mode): mode for mode in modes}
-		for future in concurrent.futures.as_completed(future_to_mode):
-			mode = future_to_mode[future]
-			try:
-				c_model, c_metadata, c_result = future.result()
-				candidate = {
-					"name": mode,
-					"mode": mode,
-					"model": c_model,
-					"metadata": c_metadata,
-					"result": c_result,
-				}
-				candidates_results.append(candidate)
-				yield {
-					"status": "candidate_complete", 
-					"candidate": mode, 
-					"result": c_result,
-					"metadata": c_metadata
-				}
-			except Exception as exc:
-				logger.error("Candidate %s failed during autotuning: %s", mode, exc)
-				yield {"status": "candidate_failed", "candidate": mode, "error": str(exc)}
+	if modes:
+		yield {"status": "evaluating_parallel", "candidates": modes, "message": f"Evaluating {', '.join(modes)} in parallel..."}
+		
+		with concurrent.futures.ThreadPoolExecutor(max_workers=len(modes)) as executor:
+			future_to_mode = {executor.submit(_evaluate_candidate, model, profile, mode): mode for mode in modes}
+			for future in concurrent.futures.as_completed(future_to_mode):
+				mode = future_to_mode[future]
+				try:
+					c_model, c_metadata, c_result = future.result()
+					candidate = {
+						"name": mode,
+						"mode": mode,
+						"model": c_model,
+						"metadata": c_metadata,
+						"result": c_result,
+					}
+					candidates_results.append(candidate)
+					yield {
+						"status": "candidate_complete", 
+						"candidate": mode, 
+						"result": c_result,
+						"metadata": c_metadata
+					}
+				except Exception as exc:
+					logger.error("Candidate %s failed during autotuning: %s", mode, exc)
+					yield {"status": "candidate_failed", "candidate": mode, "error": str(exc)}
+	else:
+		logger.info("No candidates to evaluate in parallel.")
 
 	yield {"status": "scoring", "message": "Scoring candidates..."}
 	scored_candidates = []

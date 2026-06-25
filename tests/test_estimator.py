@@ -193,6 +193,7 @@ def test_estimate_performance_batch_size_rule_gpu_profile(monkeypatch: pytest.Mo
     assert estimator._get_batch_size(profile) == 8
 
 def test_estimator_tracemalloc(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("torch")
     import torch
     import torch.nn as nn
     import sysaware.core.estimator as estimator
@@ -218,6 +219,7 @@ def test_estimator_tracemalloc(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result["memory_mb"] > static_mem
 
 def test_estimator_dynamic_iterations(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("torch")
     import torch
     import time
     import torch.nn as nn

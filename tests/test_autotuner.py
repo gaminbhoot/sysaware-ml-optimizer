@@ -161,3 +161,13 @@ def test_autotune_score_function_balanced_uses_weighted_combination() -> None:
     b = {"latency_range_ms": (5.0, 6.0), "memory_mb": 5.0, "confidence": "high", "method": "x"}
     meta = {"accuracy_parity": {"parity_score": 1.0}}
     assert autotuner._candidate_score(a, "balanced", meta) != autotuner._candidate_score(b, "balanced", meta)
+
+
+def test_autotune_with_all_blacklisted_modes() -> None:
+    profile = {"gpu_available": False, "ram_gb": 8.0, "gpu_vram_gb": 0.0}
+    class FakeModel:
+        pass
+    model = FakeModel()
+    best_config, _, _ = autotuner.autotune(model, profile, "latency", blacklist=["int8", "fp16"])
+    assert best_config["evaluated_candidates"] == 1
+    assert best_config["name"] == "baseline"

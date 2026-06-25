@@ -1,7 +1,10 @@
 from __future__ import annotations
 import time
 from typing import Any, Dict, Optional
-import torch
+try:
+    import torch
+except ImportError:
+    torch = None
 from .logging_utils import get_logger
 
 logger = get_logger("sysaware.evaluator")
@@ -15,7 +18,7 @@ class AccuracyValidator:
         In a real scenario, this would use a small validation dataset.
         Here we use synthetic data if it's a torch module.
         """
-        if not isinstance(original, torch.nn.Module) or not isinstance(optimized, torch.nn.Module):
+        if torch is None or not isinstance(original, torch.nn.Module) or not isinstance(optimized, torch.nn.Module):
             return {"parity_score": 1.0, "status": "skipped (not a torch module)"}
 
         try:

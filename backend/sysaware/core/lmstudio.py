@@ -197,7 +197,9 @@ class LMStudioClient:
         instances = lm_model.get('loaded_instances', [])
         if isinstance(instances, list) and len(instances) > 0:
             # Prefer the first active instance's 'id' as the 'instance_id' for unloading
-            model_id = instances[0].get('id', model_id)
+            first_inst = instances[0]
+            if isinstance(first_inst, dict):
+                model_id = first_inst.get('id', model_id)
 
         # Extract param count from params_string (e.g. "0.5B" or "14B")
         params_str = lm_model.get('params_string', '')
@@ -234,6 +236,14 @@ class LMStudioClient:
         # The base key of the model in LM Studio (stable across load states)
         base_id = lm_model.get('key', lm_model.get('id', name))
         
+        # Safe extraction of quantization
+        quantization_val = lm_model.get('quantization')
+        quantization_name = 'unknown'
+        if isinstance(quantization_val, dict):
+            quantization_name = quantization_val.get('name', 'unknown')
+        elif isinstance(quantization_val, str):
+            quantization_name = quantization_val
+        
         return {
             "model_name": name,
             "model_id": model_id,
@@ -243,7 +253,7 @@ class LMStudioClient:
             "size_mb": size_mb,
             "layer_types": {
                 "Architecture": lm_model.get('architecture', 'unknown'),
-                "Quantization": lm_model.get('quantization', {}).get('name', 'unknown'),
+                "Quantization": quantization_name,
                 "Format": lm_model.get('format', 'unknown')
             },
             "is_external": True,

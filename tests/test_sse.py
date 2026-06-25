@@ -1,3 +1,5 @@
+import pytest
+pytest.importorskip("torch")
 import requests
 import json
 import time
@@ -5,7 +7,6 @@ import os
 import torch
 import torch.nn as nn
 from pathlib import Path
-import pytest
 
 class DummyModel(nn.Module):
     def __init__(self):
