@@ -84,23 +84,26 @@ if not SYSAWARE_API_KEY:
 # 1b. Admin key separation
 SYSAWARE_ADMIN_KEY = os.getenv("SYSAWARE_ADMIN_KEY")
 if not SYSAWARE_ADMIN_KEY:
-    if IS_DEV:
-        import secrets
-        SYSAWARE_ADMIN_KEY = "sysaware_admin_" + secrets.token_hex(16)
-        is_loopback = SYSAWARE_BIND.strip().lower() in ["127.0.0.1", "localhost", "::1"]
-        if is_loopback:
-            print("\n" + "!" * 60)
-            print(f"WARNING: No SYSAWARE_ADMIN_KEY was provided.")
-            print(f"Generated a secure random ADMIN API key for this session:")
-            print(f"  {SYSAWARE_ADMIN_KEY}")
-            print("Please set SYSAWARE_ADMIN_KEY in your environment to use a persistent admin key.")
-            print("!" * 60 + "\n")
-        else:
-            raise RuntimeError("SECURITY ERROR: Auto-generated ADMIN key cannot be used when bound to a non-loopback interface.")
-    elif IS_TEST and os.getenv("SYSAWARE_DISABLE_AUTH_FOR_TESTS") == "true":
-        SYSAWARE_ADMIN_KEY = None
+    if SYSAWARE_API_KEY:
+        SYSAWARE_ADMIN_KEY = SYSAWARE_API_KEY
     else:
-        raise RuntimeError(f"SECURITY ERROR: SYSAWARE_ADMIN_KEY is not set in environment (ENV={ENV}).")
+        if IS_DEV:
+            import secrets
+            SYSAWARE_ADMIN_KEY = "sysaware_admin_" + secrets.token_hex(16)
+            is_loopback = SYSAWARE_BIND.strip().lower() in ["127.0.0.1", "localhost", "::1"]
+            if is_loopback:
+                print("\n" + "!" * 60)
+                print(f"WARNING: No SYSAWARE_ADMIN_KEY was provided.")
+                print(f"Generated a secure random ADMIN API key for this session:")
+                print(f"  {SYSAWARE_ADMIN_KEY}")
+                print("Please set SYSAWARE_ADMIN_KEY in your environment to use a persistent admin key.")
+                print("!" * 60 + "\n")
+            else:
+                raise RuntimeError("SECURITY ERROR: Auto-generated ADMIN key cannot be used when bound to a non-loopback interface.")
+        elif IS_TEST and os.getenv("SYSAWARE_DISABLE_AUTH_FOR_TESTS") == "true":
+            SYSAWARE_ADMIN_KEY = None
+        else:
+            raise RuntimeError(f"SECURITY ERROR: SYSAWARE_ADMIN_KEY is not set in environment (ENV={ENV}).")
 
 # 3. CORS Origins
 cors_origins_env = os.getenv("SYSAWARE_CORS_ORIGINS")
