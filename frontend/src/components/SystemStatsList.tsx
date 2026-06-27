@@ -1,24 +1,33 @@
 import { motion } from 'framer-motion';
 import { Activity, Cpu, Monitor, HardDrive, Zap } from 'lucide-react';
 
-const StatCard = ({ label, value, icon: Icon, delay = 0 }: { label: string, value: string | number, icon: any, delay?: number }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] }}
-    className="glass-card p-5 md:p-6 flex flex-col justify-between min-h-[140px] md:h-40 group hover:bg-white/[0.04] transition-all"
-  >
-    <div className="flex items-center gap-3">
-      <div className="p-2 rounded-lg bg-white/5 text-white/50 group-hover:text-white transition-colors shrink-0">
-        <Icon size={18} />
+const StatCard = ({ label, value, icon: Icon, delay = 0 }: { label: string, value: string | number, icon: any, delay?: number }) => {
+  const getValueFontSize = (val: string | number) => {
+    if (typeof val !== 'string') return 'text-xl md:text-3xl';
+    if (val.length > 30) return 'text-base md:text-lg leading-snug';
+    if (val.length > 15) return 'text-lg md:text-xl leading-snug';
+    return 'text-xl md:text-3xl';
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] }}
+      className="glass-card p-5 md:p-6 flex flex-col justify-between min-h-[140px] md:min-h-[160px] h-auto group hover:bg-white/[0.04] transition-all"
+    >
+      <div className="flex items-center gap-3">
+        <div className="p-2 rounded-lg bg-white/5 text-white/50 group-hover:text-white transition-colors shrink-0">
+          <Icon size={18} />
+        </div>
+        <span className="text-luxury-mono text-[10px] md:text-[11px]">{label}</span>
       </div>
-      <span className="text-luxury-mono text-[10px] md:text-[11px]">{label}</span>
-    </div>
-    <div className="font-sans font-bold text-xl md:text-3xl text-white tracking-tight break-words">
-      {value}
-    </div>
-  </motion.div>
-);
+      <div className={`font-sans font-bold text-white tracking-tight break-words mt-4 ${getValueFontSize(value)}`}>
+        {value}
+      </div>
+    </motion.div>
+  );
+};
 
 interface SystemStatsListProps {
   loading: boolean;
