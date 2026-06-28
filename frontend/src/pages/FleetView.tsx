@@ -33,6 +33,10 @@ interface ConfirmConfig {
 
 export const FleetView = () => {
   const { addNotification } = useNotification();
+  const serverBaseUrl = `${window.location.protocol}//${window.location.host}`;
+  const ingestionUrl = `${serverBaseUrl}/api/telemetry/ingest`;
+  const proxyUrl = `${serverBaseUrl}/v1`;
+  const cliLaunchCmd = `export SYSAWARE_API_KEY="your_api_key"\npython backend/sysaware/cli.py --model-path <model_path> --server ${serverBaseUrl}`;
   const [activeNodes, setActiveNodes] = useState<NodeData[]>([]);
   const [history, setHistory] = useState<TelemetryData[]>([]);
   const [pendingNode, setPendingNode] = useState<string | null>(null);
@@ -569,12 +573,12 @@ export const FleetView = () => {
                     <div>
                       <p className="text-[10px] text-muted mb-1 uppercase font-mono tracking-wider">Ingestion Target</p>
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/20 border border-white/5 font-mono text-[11px] text-silver/80">
-                        <span className="truncate pr-2">http://localhost:8000/api/telemetry/ingest</span>
+                        <span className="truncate pr-2">{ingestionUrl}</span>
                         <button 
-                          onClick={() => handleCopy("http://localhost:8000/api/telemetry/ingest")}
+                          onClick={() => handleCopy(ingestionUrl)}
                           className="text-silver/40 hover:text-white transition-colors hover:underline text-[10px]"
                         >
-                          {copiedText === "http://localhost:8000/api/telemetry/ingest" ? "Copied!" : "Copy"}
+                          {copiedText === ingestionUrl ? "Copied!" : "Copy"}
                         </button>
                       </div>
                     </div>
@@ -582,12 +586,12 @@ export const FleetView = () => {
                     <div>
                       <p className="text-[10px] text-muted mb-1 uppercase font-mono tracking-wider">OpenAI Proxy URL</p>
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/20 border border-white/5 font-mono text-[11px] text-silver/80">
-                        <span className="truncate pr-2">http://localhost:8000/v1</span>
+                        <span className="truncate pr-2">{proxyUrl}</span>
                         <button 
-                          onClick={() => handleCopy("http://localhost:8000/v1")}
+                          onClick={() => handleCopy(proxyUrl)}
                           className="text-silver/40 hover:text-white transition-colors hover:underline text-[10px]"
                         >
-                          {copiedText === "http://localhost:8000/v1" ? "Copied!" : "Copy"}
+                          {copiedText === proxyUrl ? "Copied!" : "Copy"}
                         </button>
                       </div>
                     </div>
@@ -597,12 +601,12 @@ export const FleetView = () => {
                 <div className="mt-8 pt-4 border-t border-white/5">
                   <p className="text-[10px] text-muted mb-2 uppercase font-mono tracking-wider">CLI Launch Command</p>
                   <div className="p-3 bg-black/30 border border-white/5 rounded-xl font-mono text-[10px] text-silver/90 whitespace-pre overflow-x-auto relative group">
-                    <code>{`export SYSAWARE_INGEST_URL="http://localhost:8000/api/telemetry/ingest"\npython -m sysaware_client --interval 5`}</code>
+                    <code>{cliLaunchCmd}</code>
                     <button 
-                      onClick={() => handleCopy(`export SYSAWARE_INGEST_URL="http://localhost:8000/api/telemetry/ingest"\npython -m sysaware_client --interval 5`)}
+                      onClick={() => handleCopy(cliLaunchCmd)}
                       className="absolute top-2 right-2 text-silver/40 hover:text-white text-[10px] bg-white/5 px-2 py-0.5 rounded transition-all opacity-0 group-hover:opacity-100 font-sans"
                     >
-                      {copiedText === `export SYSAWARE_INGEST_URL="http://localhost:8000/api/telemetry/ingest"\npython -m sysaware_client --interval 5` ? "Copied!" : "Copy"}
+                      {copiedText === cliLaunchCmd ? "Copied!" : "Copy"}
                     </button>
                   </div>
                 </div>

@@ -369,9 +369,30 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
 				join_url = f"{server_url.rstrip('/')}/api/fleet/join/request"
 				requests.post(join_url, json={"machine_id": machine_id}, headers=_get_headers(), timeout=5)
 				
-				# Start heartbeat and approval poller
+				# Start heartbeat daemon thread
 				start_heartbeat(server_url)
-				threading.Thread(target=check_approval, args=(server_url, machine_id), daemon=True).start()
+				
+				# Block main thread until the admin approves this node on the dashboard
+				if not IS_APPROVED:
+					print("\n" + "=" * 60)
+					print("AWAITING FLEET APPROVAL: Please approve this node on the Fleet Dashboard.")
+					print("=" * 60 + "\n")
+					check_approval(server_url, machine_id)
+				
+				# Send an immediate heartbeat to register node as active
+				if IS_APPROVED:
+					try:
+						from core.system_profiler import get_system_profile
+						heartbeat_url = f"{server_url.rstrip('/')}/api/telemetry/heartbeat"
+						profile = get_system_profile()
+						payload = {
+							"machine_id": machine_id,
+							"hardware_profile": profile,
+							"status": "benchmarking"
+						}
+						requests.post(heartbeat_url, json=payload, headers=_get_headers(), timeout=5)
+					except Exception as e:
+						logger.debug(f"Failed to send initial heartbeat: {e}")
 				
 			except Exception as e:
 				logger.warning(f"Failed to communicate join request: {e}")
