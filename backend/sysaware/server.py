@@ -532,10 +532,13 @@ class EventBroker:
         self.listeners.add(queue)
         try:
             while True:
-                msg = await queue.get()
-                if msg is None:
-                    break
-                yield msg
+                try:
+                    msg = await asyncio.wait_for(queue.get(), timeout=25.0)
+                    if msg is None:
+                        break
+                    yield msg
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
         finally:
             self.listeners.discard(queue)
 
