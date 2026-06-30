@@ -195,3 +195,66 @@ def test_chat_stream_timeout(monkeypatch):
                 events.append(decoded_line)
         
         assert any("timed out" in e for e in events)
+
+
+def test_dev_no_auth_loopback(monkeypatch):
+    import sysaware.server as server
+    monkeypatch.setattr(server, "IS_DEV", True)
+    monkeypatch.setattr(server, "SYSAWARE_BIND", "127.0.0.1")
+    monkeypatch.setattr(server, "SYSAWARE_API_KEY", "test_key")
+    
+    client = TestClient(app)
+    client.no_auth_inject = True
+    # Auth should be bypassed, so we expect 200 OK
+    response = client.get("/api/fleet/active")
+    assert response.status_code == 200
+
+
+def test_dev_auth_non_loopback(monkeypatch):
+    import sysaware.server as server
+    monkeypatch.setattr(server, "IS_DEV", True)
+    monkeypatch.setattr(server, "SYSAWARE_BIND", "0.0.0.0")
+    monkeypatch.setattr(server, "SYSAWARE_API_KEY", "test_key")
+    
+    client = TestClient(app)
+    client.no_auth_inject = True
+    # Bound to non-loopback, so auth must be enforced -> 401 Unauthorized
+    response = client.get("/api/fleet/active")
+    assert response.status_code == 401
+    
+    # Request with correct key should pass
+    # Note: conftest.py's auto-injection is disabled, so we explicitly provide it
+    response = client.get("/api/fleet/active", headers={"X-API-Key": "test_key"})
+    assert response.status_code == 200
+
+
+def test_env_loader_parsing():
+    lines = [
+        "ENV=development",
+        "export SYSAWARE_API_KEY=my_cool_dev_key",
+        "SYSAWARE_ADMIN_KEY='my_cool_admin_key'",
+        "# comment line",
+        "   ",
+        "EXPORTED_VAR = \"with quotes\""
+    ]
+    
+    parsed = {}
+    for line in lines:
+        line = line.strip()
+        if line and not line.startswith("#"):
+            if line.startswith("export "):
+                line = line[7:].strip()
+            if "=" in line:
+                key, val = line.split("=", 1)
+                val = val.strip()
+                if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                    val = val[1:-1]
+                parsed[key.strip()] = val
+                
+    assert parsed["ENV"] == "development"
+    assert parsed["SYSAWARE_API_KEY"] == "my_cool_dev_key"
+    assert parsed["SYSAWARE_ADMIN_KEY"] == "my_cool_admin_key"
+    assert parsed["EXPORTED_VAR"] == "with quotes"
+
+
+

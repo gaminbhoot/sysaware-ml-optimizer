@@ -51,6 +51,23 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="SysAware ML Optimizer API", lifespan=lifespan)
 
+# --- Load .env if present ---
+_project_root = Path(__file__).resolve().parent.parent.parent
+_env_path = _project_root / ".env"
+if _env_path.exists():
+    with open(_env_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                if line.startswith("export "):
+                    line = line[7:].strip()
+                if "=" in line:
+                    key, val = line.split("=", 1)
+                    val = val.strip()
+                    if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                        val = val[1:-1]
+                    os.environ[key.strip()] = val
+
 # --- Configuration & Security ---
 ENV = os.getenv("ENV") or os.getenv("SYSAWARE_ENV") or "development"
 IS_PRODUCTION = ENV.lower() == "production"
@@ -331,7 +348,11 @@ async def security_middleware(request: Request, call_next):
                     _STREAM_TOKENS.pop(stream_key, None)
                     is_authenticated = True
 
-        if not is_authenticated:
+        # Determine if we skip API auth in dev loopback mode
+        is_loopback = SYSAWARE_BIND.strip().lower() in ["127.0.0.1", "localhost", "::1"]
+        dev_no_auth = IS_DEV and is_loopback
+
+        if not is_authenticated and not dev_no_auth:
             if SYSAWARE_API_KEY:
                 is_valid = False
                 if provided_key:

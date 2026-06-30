@@ -46,6 +46,7 @@ temp*.py
 temp*.pt
 test.py
 test.pt
+temp_all_changes.patch
 .self-eval-scores.jsonl
 *.log
 npm-debug.log*

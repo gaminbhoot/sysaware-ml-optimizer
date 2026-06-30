@@ -16,6 +16,24 @@ if __name__ == "__main__" and __package__ is None:
 else:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+# --- Load .env if present ---
+import os
+_project_root = Path(__file__).resolve().parent.parent.parent
+_env_path = _project_root / ".env"
+if _env_path.exists():
+    with open(_env_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                if line.startswith("export "):
+                    line = line[7:].strip()
+                if "=" in line:
+                    key, val = line.split("=", 1)
+                    val = val.strip()
+                    if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                        val = val[1:-1]
+                    os.environ[key.strip()] = val
+
 from .core.contracts import GOALS
 from .core.estimator import estimate_performance
 from .core.logging_utils import get_logger
