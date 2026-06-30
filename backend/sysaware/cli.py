@@ -73,7 +73,7 @@ def check_approval(server_url: str, machine_id: str):
 
 def start_heartbeat(server_url: str):
 	"""Starts a background thread to send periodic heartbeats to the server."""
-	from core.system_profiler import get_system_profile
+	from .core.system_profiler import get_system_profile
 
 	machine_id = f"{platform.node()}_{platform.system()}"
 	profile = get_system_profile()
@@ -382,7 +382,6 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
 				# Send an immediate heartbeat to register node as active
 				if IS_APPROVED:
 					try:
-						from core.system_profiler import get_system_profile
 						heartbeat_url = f"{server_url.rstrip('/')}/api/telemetry/heartbeat"
 						profile = get_system_profile()
 						payload = {
