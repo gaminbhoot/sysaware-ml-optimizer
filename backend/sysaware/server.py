@@ -337,7 +337,9 @@ async def security_middleware(request: Request, call_next):
             
         # Check stream token first if it is /api/telemetry/stream
         is_authenticated = False
-        if path == "/api/telemetry/stream":
+        if path == "/api/health":
+            is_authenticated = True
+        elif path == "/api/telemetry/stream":
             stream_key = provided_key or query_key
             if stream_key:
                 now = time.time()
@@ -1010,6 +1012,10 @@ async def add_to_blacklist(entry: BlacklistEntry):
         return {"status": "success"}
     except Exception as e:
         handle_api_exception(e)
+
+@app.get("/api/health")
+async def get_health():
+    return {"status": "healthy"}
 
 @app.get("/api/system")
 async def get_system():

@@ -64,12 +64,30 @@ def discover_server(timeout: float = 2.0) -> str | None:
     # Local Fallback: If we're on the same machine, try localhost
     logger.info("Discovery: No server found via UDP. Checking for local instance...")
     try:
+        import os
         import requests
+        
+        # Build headers if key is available locally
+        headers = {}
+        api_key = os.getenv("SYSAWARE_API_KEY")
+        if api_key:
+            headers["X-API-Key"] = api_key
+
         # Try common local addresses
         for host in ["127.0.0.1", "localhost"]:
             try:
-                # We check a simple heartbeat or just the existence
-                res = requests.get(f"http://{host}:8000/api/system", timeout=0.5)
+                # First try public /api/health
+                res = requests.get(f"http://{host}:8000/api/health", headers=headers, timeout=0.5)
+                if res.status_code == 200:
+                    fallback = f"http://{host}:8000"
+                    logger.info(f"Discovery: Local server detected at {fallback}")
+                    return fallback
+            except:
+                pass
+
+            try:
+                # Fallback to /api/system with headers
+                res = requests.get(f"http://{host}:8000/api/system", headers=headers, timeout=0.5)
                 if res.status_code == 200:
                     fallback = f"http://{host}:8000"
                     logger.info(f"Discovery: Local server detected at {fallback}")
