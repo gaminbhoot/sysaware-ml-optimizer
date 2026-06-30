@@ -72,7 +72,7 @@ pip install -r requirements.txt
 
 # Start the Hub (Default: http://localhost:8000)
 export PYTHONPATH=$PYTHONPATH:.
-python backend/server.py
+python backend/sysaware/server.py
 ```
 
 ### 2. Launch the Model Hub
@@ -83,6 +83,14 @@ cd frontend
 npm install
 npm run dev
 ```
+
+### 3. Running Fleet Telemetry (LAN Demo)
+To expose the central server on your Local Area Network (LAN) so other machines running the CLI can discover and join the fleet, run the server with `SYSAWARE_BIND=0.0.0.0` and configure a persistent static API/Admin key:
+
+```bash
+SYSAWARE_BIND=0.0.0.0 SYSAWARE_API_KEY=dev_key SYSAWARE_ADMIN_KEY=dev_key python backend/sysaware/server.py
+```
+
 
 ### 3. Training the Estimator (Optional)
 To update the inference predictor with the latest benchmarks:
