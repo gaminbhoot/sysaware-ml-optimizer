@@ -183,3 +183,32 @@ def test_security_weights_only(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     
     main.load_model_from_path(str(fake_model), unsafe_load=True)
     assert calls[-1] == "weights_only:False"
+
+
+def test_run_pipeline_handles_api_key_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(main, "set_global_seed", lambda seed: None)
+    monkeypatch.setattr(main, "get_system_profile", lambda: {"cpu_cores": 8, "ram_gb": 16.0, "ram_available_gb": 12.0, "gpu_available": False, "gpu_backend": "cpu", "gpu_name": "None", "gpu_vram_gb": 0.0, "dgpu_name": "None", "dgpu_vram_gb": 0.0, "igpu_name": "None", "igpu_vram_gb": 0.0, "npu_available": False, "npu_name": "None", "os": "Windows 11"})
+    monkeypatch.setattr(main, "load_model_from_path", lambda path, unsafe_load=False: {"model": path})
+    
+    # Mock requests.post to return a response with 401 status code
+    class MockResponse:
+        def __init__(self, status_code):
+            self.status_code = status_code
+        def json(self):
+            return {"detail": "Unauthorized"}
+            
+    import requests
+    monkeypatch.setattr(requests, "post", lambda *args, **kwargs: MockResponse(401))
+    
+    args = main.parse_args([
+        "--model-path",
+        "model.pt",
+        "--goal",
+        "balanced",
+        "--server",
+        "http://some-server:8000"
+    ])
+    
+    with pytest.raises(RuntimeError, match="API key mismatch"):
+        main.run_pipeline(args)
+

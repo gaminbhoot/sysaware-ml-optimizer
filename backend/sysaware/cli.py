@@ -385,7 +385,10 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
 		if server_url:
 			try:
 				join_url = f"{server_url.rstrip('/')}/api/fleet/join/request"
-				requests.post(join_url, json={"machine_id": machine_id}, headers=_get_headers(), timeout=5)
+				response = requests.post(join_url, json={"machine_id": machine_id}, headers=_get_headers(), timeout=5)
+				if response.status_code == 401:
+					logger.error("API key mismatch")
+					raise RuntimeError("API key mismatch: The central server rejected our fleet join request.")
 				
 				# Start heartbeat daemon thread
 				start_heartbeat(server_url)
@@ -411,6 +414,8 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
 					except Exception as e:
 						logger.debug(f"Failed to send initial heartbeat: {e}")
 				
+			except RuntimeError as e:
+				raise e
 			except Exception as e:
 				logger.warning(f"Failed to communicate join request: {e}")
 
