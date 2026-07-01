@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from .contracts import ModelAnalysis
@@ -34,7 +34,7 @@ def _is_tensor_like(value: Any) -> bool:
 	return all(hasattr(value, attr) for attr in ("numel", "element_size"))
 
 
-def _sum_tensor_collection(values: list[Any]) -> tuple[int, float]:
+def _sum_tensor_collection(values: Iterable[Any]) -> tuple[int, float]:
 	count = 0
 	size_mb = 0.0
 	for item in values:
@@ -87,14 +87,13 @@ def analyze_model(model: Any) -> ModelAnalysis:
 
 	if hasattr(model, "parameters"):
 		try:
-			parameters = list(model.parameters())
+			parameters = model.parameters()
 		except Exception as exc:
 			raise ValueError(f"Unable to read model parameters: {exc}") from exc
 
-		if not parameters:
-			logger.warning("Model '%s' has no parameters", model_name)
-
+		has_parameters = False
 		for parameter in parameters:
+			has_parameters = True
 			try:
 				total_params += int(parameter.numel())
 			except Exception:
@@ -103,8 +102,11 @@ def analyze_model(model: Any) -> ModelAnalysis:
 				trainable_params += int(parameter.numel())
 			size_mb += _tensor_size_mb(parameter)
 
+		if not has_parameters:
+			logger.warning("Model '%s' has no parameters", model_name)
+
 		try:
-			buffers = list(model.buffers()) if hasattr(model, "buffers") else []
+			buffers = model.buffers() if hasattr(model, "buffers") else []
 		except Exception:
 			buffers = []
 		_, buffer_size_mb = _sum_tensor_collection(buffers)

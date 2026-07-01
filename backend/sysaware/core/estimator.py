@@ -3,6 +3,9 @@ from __future__ import annotations
 import statistics
 import time
 import tracemalloc
+import os
+import warnings
+from functools import lru_cache
 from typing import Any
 
 from .contracts import PerformanceEstimate
@@ -27,7 +30,7 @@ def _estimate_static_memory_mb(model: Any) -> float:
 
 	if hasattr(model, "parameters"):
 		try:
-			params = list(model.parameters())
+			params = model.parameters()
 		except Exception:
 			params = []
 
@@ -226,19 +229,29 @@ def _run_micro_benchmark(model: Any, profile: dict[str, Any]) -> tuple[tuple[flo
 	confidence = "high" if len(durations) >= 5 else "medium"
 	return (latency_low, latency_high), memory_mb, confidence
 
-import os
-import warnings
+@lru_cache(maxsize=1)
+def _load_prediction_artifacts() -> tuple[Any, Any, Any, Any | None] | None:
+	try:
+		import pandas as pd
+		import joblib
+	except ImportError:
+		return None
+
+	try:
+		with warnings.catch_warnings():
+			warnings.simplefilter("ignore")
+			estimator_invram = joblib.load("data/estimator_invram.joblib")
+			estimator_metadata = joblib.load("data/estimator_metadata.joblib")
+			estimator_spill = None
+			if os.path.exists("data/estimator_ramspill.joblib"):
+				estimator_spill = joblib.load("data/estimator_ramspill.joblib")
+	except Exception:
+		return None
+
+	return pd, estimator_invram, estimator_metadata, estimator_spill
 
 def predict_inference_speed(hardware_specs: dict, model_metadata: dict) -> dict:
     """Predicts tok/s using trained regression models."""
-    # Try to import pandas and joblib on demand
-    try:
-        import pandas as pd
-        import joblib
-        has_ml = True
-    except ImportError:
-        has_ml = False
-
     # Feature engineering
     mem_bw = hardware_specs.get("memory_bandwidth_gbps", 100.0)
     vram = hardware_specs.get("vram_gb", 8.0)
@@ -251,7 +264,9 @@ def predict_inference_speed(hardware_specs: dict, model_metadata: dict) -> dict:
     is_apple = 1 if any(x in gpu_name for x in ["M1", "M2", "M3", "M4", "APPLE", "SILICON"]) else 0
     is_spill = 1 if model_size > (vram * 0.8) else 0
 
-    if not has_ml:
+    artifacts = _load_prediction_artifacts()
+
+    if artifacts is None:
         # Heuristic fallback if ML packages are missing
         if is_spill:
             prediction = 2.0
@@ -269,46 +284,7 @@ def predict_inference_speed(hardware_specs: dict, model_metadata: dict) -> dict:
             "is_ram_spill": bool(is_spill)
         }
 
-    # Load models and metadata on demand
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            estimator_invram = joblib.load("data/estimator_invram.joblib")
-            estimator_metadata = joblib.load("data/estimator_metadata.joblib")
-            # Try to load spill model if it exists
-            estimator_spill = None
-            if os.path.exists("data/estimator_ramspill.joblib"):
-                estimator_spill = joblib.load("data/estimator_ramspill.joblib")
-    except Exception:
-        # Fallback if joblib load fails (e.g. file missing)
-        if is_spill:
-            prediction = 2.0
-            mae = 1.0
-            method = "spill-fallback"
-        else:
-            prediction = float((mem_bw / max(1.0, model_size)) * 0.8)
-            mae = 3.0
-            method = "heuristic-fallback"
-        return {
-            "predicted_tok_s": prediction,
-            "confidence_interval": [max(0.0, prediction - mae), prediction + mae],
-            "method": method,
-            "is_apple": bool(is_apple),
-            "is_ram_spill": bool(is_spill)
-        }
-
-    # Feature engineering
-    mem_bw = hardware_specs.get("memory_bandwidth_gbps", 100.0)
-    vram = hardware_specs.get("vram_gb", 8.0)
-    params = model_metadata.get("params_b", 7.0)
-    bits = model_metadata.get("quant_bits", 4.0)
-    model_size = (params * bits) / 8
-    
-    # Platform detection
-    gpu_name = hardware_specs.get("gpu_name", "").upper()
-    is_apple = 1 if any(x in gpu_name for x in ["M1", "M2", "M3", "M4", "APPLE", "SILICON"]) else 0
-
-    is_spill = 1 if model_size > (vram * 0.8) else 0
+    pd, estimator_invram, estimator_metadata, estimator_spill = artifacts
 
     features = ['memory_bandwidth_gbps', 'vram_gb', 'model_size_gb', 'quant_bits', 'is_apple']
     input_data = pd.DataFrame([[mem_bw, vram, model_size, bits, is_apple]], columns=features)

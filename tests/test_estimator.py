@@ -192,6 +192,32 @@ def test_estimate_performance_batch_size_rule_gpu_profile(monkeypatch: pytest.Mo
     profile = {"gpu_available": True, "ram_gb": 16.0, "gpu_vram_gb": 12.0}
     assert estimator._get_batch_size(profile) == 8
 
+
+def test_predict_inference_speed_uses_loaded_artifacts(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakePandas:
+        @staticmethod
+        def DataFrame(rows, columns):
+            return {"rows": rows, "columns": columns}
+
+    class FakeEstimator:
+        def predict(self, input_data):
+            return [42.0]
+
+    monkeypatch.setattr(
+        estimator,
+        "_load_prediction_artifacts",
+        lambda: (FakePandas, FakeEstimator(), {"maes": {"invram": 2.0}}, None),
+    )
+
+    result = estimator.predict_inference_speed(
+        {"memory_bandwidth_gbps": 300.0, "vram_gb": 16.0, "gpu_name": "RTX 4090"},
+        {"params_b": 7.0, "quant_bits": 4.0},
+    )
+
+    assert result["predicted_tok_s"] == 42.0
+    assert result["confidence_interval"] == [40.0, 44.0]
+    assert result["method"] == "randomforest-invram"
+
 def test_estimator_tracemalloc(monkeypatch: pytest.MonkeyPatch) -> None:
     pytest.importorskip("torch")
     import torch
