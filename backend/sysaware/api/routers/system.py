@@ -1,6 +1,5 @@
-import anyio
 from fastapi import APIRouter
-from ...core import system_profiler as sp
+from ..services import system as system_svc
 from ..helpers import handle_api_exception
 
 router = APIRouter(prefix="/api")
@@ -8,7 +7,6 @@ router = APIRouter(prefix="/api")
 @router.get("/system")
 async def system():
     try:
-        profile = await anyio.to_thread.run_sync(sp.get_system_profile)
-        return profile
+        return await system_svc.get_system_profile()
     except Exception as e:
         handle_api_exception(e)
