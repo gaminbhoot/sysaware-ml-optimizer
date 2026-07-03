@@ -4,5 +4,10 @@
     "@react-three/fiber",
     "three-stdlib",
     "camera-controls"
-  ]
+  ],
+  "health": {
+    "maxCyclomatic": 30,
+    "maxCognitive": 60,
+    "maxCrap": 500
+  }
 }

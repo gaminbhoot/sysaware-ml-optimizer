@@ -33,6 +33,14 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function postRuntimeAction<T>(action: 'load' | 'unload' | 'sync', runtime: 'lmstudio' | 'ollama', host: string, port: number, modelId?: string | null): Promise<T> {
+  return request<T>(`/api/${runtime}/${action}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ host, port, model_id: modelId || null })
+  });
+}
+
 export const api = {
   // System Profiler
   async getSystemProfile(): Promise<SystemProfile> {
@@ -40,7 +48,21 @@ export const api = {
     return data.profile;
   },
 
-  // Model Recommendations
+  async getGoal(): Promise<string> {
+    const data = await request<{ status: string; goal: string }>('/api/goal');
+    return data.goal;
+  },
+
+  async setGoal(goal: string): Promise<string> {
+    const data = await request<{ status: string; goal: string }>('/api/goal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ goal })
+    });
+    return data.goal;
+  },
+
+  // Model Manager
   async getModelRecommendations(): Promise<ModelRecommendation[]> {
     const data = await request<{ status: string; recommendations: ModelRecommendation[] }>('/api/models/recommendations');
     return data.recommendations;
@@ -52,27 +74,15 @@ export const api = {
   },
 
   async loadRuntimeModel(runtime: 'lmstudio' | 'ollama', host: string, port: number, modelId: string): Promise<void> {
-    await request<void>(`/api/${runtime}/load`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ host, port, model_id: modelId })
-    });
+    await postRuntimeAction<void>('load', runtime, host, port, modelId);
   },
 
   async unloadRuntimeModel(runtime: 'lmstudio' | 'ollama', host: string, port: number, modelId?: string): Promise<void> {
-    await request<void>(`/api/${runtime}/unload`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ host, port, model_id: modelId || null })
-    });
+    await postRuntimeAction<void>('unload', runtime, host, port, modelId);
   },
 
   async syncRuntimeModel(runtime: 'lmstudio' | 'ollama', host: string, port: number, modelId?: string): Promise<ModelAnalysis> {
-    const data = await request<{ status: string; analysis: ModelAnalysis }>(`/api/${runtime}/sync`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ host, port, model_id: modelId || null })
-    });
+    const data = await postRuntimeAction<{ status: string; analysis: ModelAnalysis }>('sync', runtime, host, port, modelId);
     return data.analysis;
   },
 

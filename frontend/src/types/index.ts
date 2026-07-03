@@ -79,13 +79,7 @@ export interface TelemetryReport {
   last_seen?: string;
 }
 
-export interface BlacklistEntry {
-  id?: number;
-  machine_id: string;
-  backend: string;
-  reason: string;
-  timestamp?: string;
-}
+
 
 export interface FleetNode {
   machine_id: string;
