@@ -10,6 +10,11 @@ os.environ["SYSAWARE_ENV"] = "test"
 os.environ["SYSAWARE_API_KEY"] = "test_key"
 os.environ["SYSAWARE_ADMIN_KEY"] = "admin_test_key"
 
+@pytest.fixture(scope="session", autouse=True)
+def init_test_db():
+    from sysaware.infrastructure.store import init_db
+    init_db()
+
 # Patch TestClient to automatically add X-API-Key header in test environment
 original_request = TestClient.request
 original_stream = TestClient.stream
