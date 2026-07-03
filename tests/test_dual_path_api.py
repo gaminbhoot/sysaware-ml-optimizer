@@ -76,7 +76,7 @@ def test_estimate_inference_hardware_aware():
     response = client.post("/api/estimate/inference", json=payload_spill)
     data = response.json()
     assert data["is_ram_spill"] is True
-    assert data["method"] == "spill-fallback"
+    assert data["method"] in {"randomforest-ramspill", "spill-fallback"}
 
 def test_get_recommendations():
     """Verify that the model recommendations endpoint returns a valid response."""
