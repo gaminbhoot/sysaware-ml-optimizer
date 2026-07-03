@@ -66,7 +66,7 @@ async def unload_model(req: UnloadRequest):
         print(f"Model Unload failed: {e}")
         raise HTTPException(status_code=500, detail=f"Model unload failed: {str(e)}")
 
-@router.post("/model/registry")
+@router.post("/model/registry", deprecated=True)
 async def register_model(req: ModelRegisterRequest):
     try:
         return await models_svc.register_model(
@@ -80,7 +80,7 @@ async def register_model(req: ModelRegisterRequest):
     except Exception as e:
         handle_api_exception(e)
 
-@router.post("/model/drift")
+@router.post("/model/drift", deprecated=True)
 async def check_drift(req: DriftRequest):
     try:
         return await models_svc.check_drift(

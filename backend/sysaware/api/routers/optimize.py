@@ -24,7 +24,7 @@ from ..config import (
 
 router = APIRouter(prefix="/api")
 
-@router.post("/optimize/baseline")
+@router.post("/optimize/baseline", deprecated=True)
 async def estimate_baseline(req: BaselineRequest):
     validate_model_path_and_load(req.model_path, False)
     if not await model_concurrency.acquire():
@@ -43,7 +43,7 @@ async def generate_strategy(req: StrategyRequest):
     except Exception as e:
         handle_api_exception(e)
 
-@router.post("/optimize/autotune")
+@router.post("/optimize/autotune", deprecated=True)
 async def autotune_endpoint(req: AutotuneRequest):
     validate_model_path_and_load(req.model_path, req.unsafe_load)
     if not await model_concurrency.acquire():
@@ -122,7 +122,7 @@ async def tune_runtime_stream(req: RuntimeTuneRequest):
     except Exception as e:
         handle_api_exception(e)
 
-@router.post("/estimate/inference")
+@router.post("/estimate/inference", deprecated=True)
 async def estimate_inference(req: InferenceEstimateRequest):
     try:
         return await optimize_svc.estimate_inference(req.hardware_specs, req.model_metadata)
