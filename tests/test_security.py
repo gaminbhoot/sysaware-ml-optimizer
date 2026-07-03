@@ -203,7 +203,7 @@ def test_dev_no_auth_loopback(monkeypatch):
     monkeypatch.setattr(server, "SYSAWARE_BIND", "127.0.0.1")
     monkeypatch.setattr(server, "SYSAWARE_API_KEY", "test_key")
     
-    client = TestClient(app)
+    client = TestClient(app)and then 
     client.no_auth_inject = True
     # Auth should be bypassed, so we expect 200 OK
     response = client.get("/api/fleet/active")

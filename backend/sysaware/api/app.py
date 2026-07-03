@@ -26,8 +26,8 @@ from .routers import (
     telemetry,
     prompt,
 )
-from ..core import store
-from ..core import autodiscovery as discovery
+from sysaware.infrastructure import store
+from sysaware.infrastructure import discovery as discovery
 from ..core import system_profiler as sp
 
 # --- Background Tasks ---

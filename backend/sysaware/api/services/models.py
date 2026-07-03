@@ -7,10 +7,10 @@ import anyio
 from huggingface_hub import HfApi
 
 from ...core import model_analyzer as ma
-from ...core import store as store
+from sysaware.infrastructure import store as store
 from ...core import system_profiler as sp
-from ...core import ollama as ollama
-from ...core import lmstudio as lms
+from sysaware.infrastructure.clients import ollama as ollama
+from sysaware.infrastructure.clients import lmstudio as lms
 from ...cli import load_model_from_path
 
 # --- Caching ---

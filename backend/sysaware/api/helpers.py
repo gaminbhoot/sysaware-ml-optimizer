@@ -96,8 +96,8 @@ def tune_runtime_worker(model_id, source, system_profile):
     return tuner.runtime_tune_generator(model_id, source, system_profile)
 
 def chat_worker(port, host, messages, model_id):
-    import sysaware.core.ollama as ollama
-    import sysaware.core.lmstudio as lms
+    import sysaware.infrastructure.clients.ollama as ollama
+    import sysaware.infrastructure.clients.lmstudio as lms
     if port == 11434:
         client = ollama.OllamaClient(host=host, port=port)
     else:

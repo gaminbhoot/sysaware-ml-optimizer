@@ -1,6 +1,6 @@
 import anyio
-from ...core import lmstudio as lms
-from ...core import ollama as ollama
+from sysaware.infrastructure.clients import lmstudio as lms
+from sysaware.infrastructure.clients import ollama as ollama
 from ..helpers import run_generator_in_process
 
 # --- LM Studio Sync/List/Load/Unload ---

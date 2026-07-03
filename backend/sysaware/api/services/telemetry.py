@@ -1,6 +1,6 @@
 import anyio
-from ...core import store as store
-from ..middleware import broker
+from sysaware.infrastructure import store as store
+from sysaware.infrastructure.broker import broker
 
 async def ingest_telemetry(machine_id: str, hardware_profile: dict, goal: str, latency_range: list[float], memory_mb: float, model_hash: str, decode_tokens_per_sec: float | None, prefill_latency_ms: float | None, raw_report: dict) -> dict:
     """Save client telemetry report to DB and publish event."""
