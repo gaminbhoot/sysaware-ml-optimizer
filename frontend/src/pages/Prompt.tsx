@@ -6,7 +6,7 @@ import {
 import { cn } from '../lib/utils';
 import { useStore } from '../context/StoreContext';
 import { useNotification } from '../context/NotificationContext';
-import { readSSEStream } from '../lib/sse';
+import { api } from '../lib/api';
 import { parseThinkingTags } from '../lib/thinking';
 import { ConversationSidebar } from '../components/ConversationSidebar';
 import { PromptLab } from '../components/PromptLab';
@@ -80,22 +80,10 @@ export const Prompts = () => {
     if (!chatInput.trim() || isInlineOptimizing) return;
     setIsInlineOptimizing(true);
     try {
-      const res = await fetch('/api/prompt/optimize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: chatInput, intent: 'general' })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.status === 'success' && data.result?.optimized_prompt) {
-          setChatInput(data.result.optimized_prompt);
-          addNotification({ type: 'success', message: 'Prompt optimized for hardware!' });
-        } else if (data.result?.optimized_prompt) {
-          setChatInput(data.result.optimized_prompt);
-          addNotification({ type: 'success', message: 'Prompt optimized for hardware!' });
-        }
-      } else {
-        throw new Error("Backend response error");
+      const data = await api.optimizePrompt(chatInput, 'general');
+      if (data.status === 'success' && data.result?.optimized_prompt) {
+        setChatInput(data.result.optimized_prompt);
+        addNotification({ type: 'success', message: 'Prompt optimized for hardware!' });
       }
     } catch (e) {
       setChatInput(`[SYSTEM: HARDWARE_AWARE_OPTIMIZATION]\n\n${chatInput}\n\n[Constraint: Maximize performance & cache efficiency]`);
@@ -160,16 +148,11 @@ export const Prompts = () => {
     try {
       const host = lmStudioHost || '127.0.0.1';
       const port = lmStudioPort || 1234;
-      const res = await fetch(`/api/lmstudio/models?host=${host}&port=${port}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.status === 'success') {
-          setAvailableModels(data.models || []);
-          if (data.models.length > 0 && !selectedModel) {
-            const active = data.models.find((m: any) => m.model_id === modelAnalysis?.model_id);
-            setSelectedModel(active ? active.model_id : data.models[0].model_id);
-          }
-        }
+      const models = await api.listRuntimeModels('lmstudio', host, port);
+      setAvailableModels(models || []);
+      if (models && models.length > 0 && !selectedModel) {
+        const active = models.find((m: any) => m.model_id === modelAnalysis?.model_id);
+        setSelectedModel(active ? active.model_id : models[0].model_id);
       }
     } catch (err) {
       console.error("Failed to fetch models:", err);
@@ -190,32 +173,23 @@ export const Prompts = () => {
     setIsLoadingModel(true);
     addNotification({ type: 'info', message: `Loading model ${modelId} in LM Studio...` });
     try {
-      const res = await fetch('/api/lmstudio/load', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model_id: modelId,
-          host: lmStudioHost || '127.0.0.1',
-          port: lmStudioPort || 1234
-        })
-      });
-      if (res.ok) {
-        setSelectedModel(modelId);
-        if (currentChatId) {
-          setConversations(prev => prev.map(c => {
-            if (c.id === currentChatId) {
-              return { ...c, modelId };
-            }
-            return c;
-          }));
-        }
-        addNotification({ type: 'success', message: `Model loaded: ${modelId}` });
-      } else {
-        const err = await res.json();
-        addNotification({ type: 'error', title: 'Model Load Failed', message: err.detail || 'Could not load model.' });
+      const host = lmStudioHost || '127.0.0.1';
+      const port = lmStudioPort || 1234;
+      await api.loadRuntimeModel('lmstudio', host, port, modelId);
+      
+      setSelectedModel(modelId);
+      if (currentChatId) {
+        setConversations(prev => prev.map(c => {
+          if (c.id === currentChatId) {
+            return { ...c, modelId };
+          }
+          return c;
+        }));
       }
+      addNotification({ type: 'success', message: `Model loaded: ${modelId}` });
     } catch (err: any) {
-      addNotification({ type: 'error', title: 'Error', message: err.message });
+      console.error("Load failed:", err);
+      addNotification({ type: 'error', title: 'Model Load Failed', message: err.message || 'Could not load model.' });
     } finally {
       setIsLoadingModel(false);
     }
@@ -237,13 +211,8 @@ export const Prompts = () => {
     if (!labInput) return;
     setIsOptimizing(true);
     try {
-      const res = await fetch('/api/prompt/optimize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: labInput, intent: labIntent })
-      });
-      if (res.ok) {
-        const data = await res.json();
+      const data = await api.optimizePrompt(labInput, labIntent);
+      if (data.status === 'success') {
         setLabResult(data.result);
       } else {
         throw new Error("Backend response error");
@@ -293,50 +262,45 @@ export const Prompts = () => {
     let fullContent = '';
 
     try {
-      const response = await fetch('/api/chat/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          messages: requestHistory,
-          host: lmStudioHost || '127.0.0.1',
-          port: lmStudioPort || 1234,
-          model_id: selectedModel || modelAnalysis?.model_id || modelAnalysis?.model_name || 'default'
-        }),
-        signal: controller.signal
-      });
+      await api.streamChat(
+        requestHistory,
+        selectedModel || modelAnalysis?.model_id || modelAnalysis?.model_name || 'default',
+        lmStudioHost || '127.0.0.1',
+        lmStudioPort || 1234,
+        (data) => {
+          if (data.content) {
+            fullContent += data.content;
 
-      await readSSEStream(response, (data) => {
-        if (data.content) {
-          fullContent += data.content;
+            const parsed = parseThinkingTags(fullContent, hasThinkStarted, thinkEndTime);
+            hasThinkStarted = parsed.hasThinkStarted;
+            thinkEndTime = parsed.thinkEndTime;
 
-          const parsed = parseThinkingTags(fullContent, hasThinkStarted, thinkEndTime);
-          hasThinkStarted = parsed.hasThinkStarted;
-          thinkEndTime = parsed.thinkEndTime;
+            const duration = thinkEndTime 
+              ? parseFloat(((thinkEndTime - startTime) / 1000).toFixed(1))
+              : parseFloat(((Date.now() - startTime) / 1000).toFixed(1));
 
-          const duration = thinkEndTime 
-            ? parseFloat(((thinkEndTime - startTime) / 1000).toFixed(1))
-            : parseFloat(((Date.now() - startTime) / 1000).toFixed(1));
+            assistantMsg = {
+              role: 'assistant',
+              content: parsed.parsedContent,
+              thinking: parsed.parsedThinking,
+              isThinking: parsed.isStillThinking,
+              thinkingDuration: hasThinkStarted ? duration : undefined
+            };
 
-          assistantMsg = {
-            role: 'assistant',
-            content: parsed.parsedContent,
-            thinking: parsed.parsedThinking,
-            isThinking: parsed.isStillThinking,
-            thinkingDuration: hasThinkStarted ? duration : undefined
-          };
-
-          setConversations(prev => prev.map(c => {
-            if (c.id === currentChatId) {
-              const msgs = [...c.messages];
-              msgs[msgs.length - 1] = assistantMsg;
-              return { ...c, messages: msgs };
-            }
-            return c;
-          }));
-        } else if (data.error) {
-          addNotification({ type: 'error', title: 'Model Error', message: data.error });
-        }
-      }, controller.signal);
+            setConversations(prev => prev.map(c => {
+              if (c.id === currentChatId) {
+                const msgs = [...c.messages];
+                msgs[msgs.length - 1] = assistantMsg;
+                return { ...c, messages: msgs };
+              }
+              return c;
+            }));
+          } else if (data.error) {
+            addNotification({ type: 'error', title: 'Model Error', message: data.error });
+          }
+        },
+        controller.signal
+      );
     } catch (e: any) {
       if (e.name === 'AbortError') {
         console.log('Stream aborted');

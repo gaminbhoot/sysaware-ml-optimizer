@@ -1,15 +1,11 @@
 import { motion } from 'framer-motion';
 import { Zap, Cpu } from 'lucide-react';
 import { cn } from '../lib/utils';
+import type { SystemProfile } from '../types';
 
 export interface TelemetryData {
   machine_id: string;
-  hardware_profile: {
-    cpu?: string;
-    ram_gb?: number;
-    dgpu_name?: string;
-    os?: string;
-  };
+  hardware_profile: SystemProfile;
   goal: string;
   latency_range: [number, number];
   memory_mb: number;

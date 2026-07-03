@@ -4,6 +4,7 @@ import { RefreshCw } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { cn } from '../lib/utils';
 import { SystemStatsList } from '../components/SystemStatsList';
+import { api } from '../lib/api';
 
 export const Profiler = () => {
   const { systemProfile, setSystemProfile } = useStore();
@@ -12,9 +13,8 @@ export const Profiler = () => {
   const runProfiler = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/system');
-      const data = await res.json();
-      setSystemProfile(data.profile);
+      const profile = await api.getSystemProfile();
+      setSystemProfile(profile);
     } catch (e) {
       console.error(e);
     }
@@ -70,10 +70,10 @@ export const Profiler = () => {
             </div>
             
             <div className="space-y-4 mb-8">
-              <CapabilityItem label="ML Acceleration" active={systemProfile?.gpu_available} />
-              <CapabilityItem label="High Bandwidth Memory" active={systemProfile?.ram_gb > 16} />
-              <CapabilityItem label="Dedicated Graphics" active={systemProfile?.dgpu_name !== 'None'} />
-              <CapabilityItem label="Neural Engine" active={systemProfile?.npu_available} />
+              <CapabilityItem label="ML Acceleration" active={!!systemProfile?.gpu_available} />
+              <CapabilityItem label="High Bandwidth Memory" active={!!systemProfile?.ram_gb && systemProfile.ram_gb > 16} />
+              <CapabilityItem label="Dedicated Graphics" active={!!systemProfile?.dgpu_name && systemProfile.dgpu_name !== 'None'} />
+              <CapabilityItem label="Neural Engine" active={!!systemProfile?.npu_available} />
             </div>
 
             <p className="text-sm text-white/40 leading-relaxed font-medium italic">

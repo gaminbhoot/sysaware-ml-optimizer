@@ -1,13 +1,14 @@
 import { createContext, useContext, useState } from "react";
 import type { ReactNode, Dispatch, SetStateAction } from "react";
+import type { SystemProfile, ModelAnalysis, Strategy } from "../types";
 
 interface StoreState {
-  systemProfile: any;
-  setSystemProfile: Dispatch<SetStateAction<any>>;
-  modelAnalysis: any;
-  setModelAnalysis: Dispatch<SetStateAction<any>>;
-  strategy: any;
-  setStrategy: Dispatch<SetStateAction<any>>;
+  systemProfile: SystemProfile | null;
+  setSystemProfile: Dispatch<SetStateAction<SystemProfile | null>>;
+  modelAnalysis: ModelAnalysis | null;
+  setModelAnalysis: Dispatch<SetStateAction<ModelAnalysis | null>>;
+  strategy: Strategy | null;
+  setStrategy: Dispatch<SetStateAction<Strategy | null>>;
   modelPath: string;
   setModelPath: Dispatch<SetStateAction<string>>;
   goal: string;
@@ -37,16 +38,16 @@ interface StoreState {
   setRuntimeTuningProgress: Dispatch<SetStateAction<any[]>>;
   optimalRuntimeConfig: any;
   setOptimalRuntimeConfig: Dispatch<SetStateAction<any>>;
-  availableModels: any[];
-  setAvailableModels: Dispatch<SetStateAction<any[]>>;
+  availableModels: ModelAnalysis[];
+  setAvailableModels: Dispatch<SetStateAction<ModelAnalysis[]>>;
 }
 
 const StoreContext = createContext<StoreState | undefined>(undefined);
 
 export const StoreProvider = ({ children }: { children: ReactNode }) => {
-  const [systemProfile, setSystemProfile] = useState<any>(null);
-  const [modelAnalysis, setModelAnalysis] = useState<any>(null);
-  const [strategy, setStrategy] = useState<any>(null);
+  const [systemProfile, setSystemProfile] = useState<SystemProfile | null>(null);
+  const [modelAnalysis, setModelAnalysis] = useState<ModelAnalysis | null>(null);
+  const [strategy, setStrategy] = useState<Strategy | null>(null);
   const [modelPath, setModelPath] = useState("");
   const [goal, setGoal] = useState("latency");
   const [lmStudioHost, setLmStudioHost] = useState("127.0.0.1");
@@ -67,7 +68,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [runtimeTuningProgress, setRuntimeTuningProgress] = useState<any[]>([]);
   const [optimalRuntimeConfig, setOptimalRuntimeConfig] = useState<any>(null);
 
-  const [availableModels, setAvailableModels] = useState<any[]>([]);
+  const [availableModels, setAvailableModels] = useState<ModelAnalysis[]>([]);
 
   return (
     <StoreContext.Provider value={{

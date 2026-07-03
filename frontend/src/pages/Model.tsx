@@ -7,7 +7,7 @@ import {
 import { useStore } from '../context/StoreContext';
 import { useNotification } from '../context/NotificationContext';
 import { cn } from '../lib/utils';
-import { readSSEStream } from '../lib/sse';
+import { api } from '../lib/api';
 import { DiagnoseTab } from '../components/DiagnoseTab';
 import { TuneTab } from '../components/TuneTab';
 import { InspectTab } from '../components/InspectTab';
@@ -74,11 +74,8 @@ export const ModelAnalysis = () => {
 
   const fetchSystemProfile = async () => {
     try {
-      const res = await fetch('/api/system');
-      const data = await res.json();
-      if (data.status === 'success') {
-        setSystemProfile(data.profile);
-      }
+      const profile = await api.getSystemProfile();
+      setSystemProfile(profile);
     } catch (e) {
       console.error('Failed to fetch system profile', e);
     }
@@ -87,11 +84,8 @@ export const ModelAnalysis = () => {
   const fetchRecommendations = async () => {
     setLoadingRecommendations(true);
     try {
-      const res = await fetch('/api/models/recommendations');
-      const data = await res.json();
-      if (data.status === 'success') {
-        setRecommendations(data.recommendations);
-      }
+      const recs = await api.getModelRecommendations();
+      setRecommendations(recs);
     } catch (e) {
       console.error('Failed to fetch recommendations', e);
     } finally {
@@ -117,11 +111,8 @@ export const ModelAnalysis = () => {
     setLoading(true);
     try {
       const clientPrefix = selectedClient === 'lmstudio' ? 'lmstudio' : 'ollama';
-      const res = await fetch(`/api/${clientPrefix}/models?host=${lmStudioHost}&port=${lmStudioPort}`);
-      const data = await res.json();
-      if (data.status === 'success') {
-        setAvailableModels(data.models);
-      }
+      const models = await api.listRuntimeModels(clientPrefix, lmStudioHost, lmStudioPort);
+      setAvailableModels(models);
     } catch (e: any) {
       addNotification({ 
         type: 'error', 
@@ -137,19 +128,10 @@ export const ModelAnalysis = () => {
     setLoading(true);
     try {
       const clientPrefix = selectedClient === 'lmstudio' ? 'lmstudio' : 'ollama';
-      const res = await fetch(`/api/${clientPrefix}/load`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model_id: modelId, host: lmStudioHost, port: lmStudioPort })
-      });
-      const data = await res.json();
-      if (data.status === 'success') {
-        addNotification({ type: 'success', title: 'Model Loaded', message: `Model ${modelId} is now active` });
-        await syncClient(modelId); // Sync metadata for this specific loaded model
-        await fetchClientModels(); // Refresh downloaded models list to update loaded flags
-      } else {
-        throw new Error(data.detail || 'Load failed');
-      }
+      await api.loadRuntimeModel(clientPrefix, lmStudioHost, lmStudioPort, modelId);
+      addNotification({ type: 'success', title: 'Model Loaded', message: `Model ${modelId} is now active` });
+      await syncClient(modelId); // Sync metadata for this specific loaded model
+      await fetchClientModels(); // Refresh downloaded models list to update loaded flags
     } catch (e: any) {
       addNotification({ type: 'error', title: 'Load Failed', message: e.message });
     } finally {
@@ -176,15 +158,7 @@ export const ModelAnalysis = () => {
   const unloadModel = async () => {
     setLoading(true);
     try {
-      await fetch('/api/model/unload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          model_id: modelAnalysis?.model_id || modelAnalysis?.model_name,
-          host: lmStudioHost,
-          port: lmStudioPort
-        })
-      });
+      await api.unloadModel(modelAnalysis?.model_id || modelAnalysis?.model_name);
       setModelAnalysis(null);
       if (activeMode === 'path') setModelPath("");
       setDiagnosticFindings([]);
@@ -199,17 +173,8 @@ export const ModelAnalysis = () => {
     if (!modelPath) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/model/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model_path: modelPath, unsafe_load: unsafeLoad })
-      });
-      const data = await res.json();
-      if (data.status === 'success') {
-        setModelAnalysis(data.analysis);
-      } else {
-        throw new Error(data.detail || 'Analysis failed');
-      }
+      const data = await api.analyzeModel(modelPath, unsafeLoad);
+      setModelAnalysis(data.analysis);
     } catch (e: any) {
       addNotification({ type: 'error', title: 'Analysis Error', message: e.message });
     }
@@ -221,33 +186,22 @@ export const ModelAnalysis = () => {
     setLoading(true);
     try {
       const clientPrefix = selectedClient === 'lmstudio' ? 'lmstudio' : 'ollama';
-      const res = await fetch(`/api/${clientPrefix}/sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ host: lmStudioHost, port: lmStudioPort, model_id: targetModelId })
+      const analysis = await api.syncRuntimeModel(clientPrefix, lmStudioHost, lmStudioPort, targetModelId);
+      setModelAnalysis(analysis);
+      if (analysis.path) setModelPath(analysis.path);
+      addNotification({ 
+        type: 'success', 
+        title: targetModelId ? 'Model Activated' : 'Client Synced', 
+        message: targetModelId 
+          ? `Switched active model to: ${analysis.model_name}` 
+          : `Connected to model: ${analysis.model_name}` 
       });
-      const data = await res.json();
-      if (data.status === 'success') {
-        setModelAnalysis(data.analysis);
-        if (data.analysis.path) setModelPath(data.analysis.path);
-        addNotification({ 
-          type: 'success', 
-          title: targetModelId ? 'Model Activated' : 'Client Synced', 
-          message: targetModelId 
-            ? `Switched active model to: ${data.analysis.model_name}` 
-            : `Connected to model: ${data.analysis.model_name}` 
-        });
-        await fetchClientModels(); // Refresh availableModels to update loaded flags
-      } else {
-        throw new Error(data.detail || 'Connection failed');
-      }
+      await fetchClientModels(); // Refresh availableModels to update loaded flags
     } catch (e: any) {
       addNotification({ 
         type: 'error', 
-        title: targetModelId ? 'Activation Failed' : 'Sync Failed', 
-        message: targetModelId 
-          ? (e.message || 'Could not switch active model')
-          : (`Ensure ${selectedClient === 'lmstudio' ? 'LM Studio' : 'Ollama'} local server is active at ` + lmStudioHost)
+        title: 'Connection Failed', 
+        message: e.message 
       });
     }
     setLoading(false);
@@ -258,18 +212,10 @@ export const ModelAnalysis = () => {
     setIsDiagnosing(true);
     setDiagnosticFindings([]);
     try {
-      const response = await fetch('/api/diagnose/custom/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model_path: modelPath, unsafe_load: unsafeLoad })
-      });
-
-      await readSSEStream(response, (data) => {
+      await api.streamDiagnostic(modelPath, unsafeLoad, (data) => {
         if (data.status === 'complete') {
           setDiagnosticFindings(data.findings);
           setIsDiagnosing(false);
-        } else if (data.findings) {
-          // Partial update if supported
         }
       });
     } catch (e: any) {
@@ -285,24 +231,19 @@ export const ModelAnalysis = () => {
     setOptimalRuntimeConfig(null);
     
     try {
-      const response = await fetch('/api/tune/runtime/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          model_id: modelAnalysis.model_name, 
-          source: modelAnalysis.external_source || 'local',
-          system_profile: systemProfile || { device: 'cpu' }
-        })
-      });
-
-      await readSSEStream(response, (data) => {
-        if (data.status === 'complete') {
-          setOptimalRuntimeConfig(data.optimal_config);
-          setIsRuntimeTuning(false);
-        } else {
-          setRuntimeTuningProgress(prev => [...prev, data]);
+      await api.streamRuntimeTune(
+        modelAnalysis.model_name,
+        modelAnalysis.external_source || 'local',
+        systemProfile || { device: 'cpu' },
+        (data) => {
+          if (data.status === 'complete') {
+            setOptimalRuntimeConfig(data.optimal_config);
+            setIsRuntimeTuning(false);
+          } else {
+            setRuntimeTuningProgress(prev => [...prev, data]);
+          }
         }
-      });
+      );
     } catch (e: any) {
       addNotification({ type: 'error', title: 'Tuning Error', message: e.message });
       setIsRuntimeTuning(false);

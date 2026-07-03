@@ -5,6 +5,7 @@ import {
   CheckCircle2, ExternalLink
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { api } from '../lib/api';
 
 const ModelCard = ({ model, idx, systemProfile }: { model: any, idx: number, systemProfile: any }) => (
   <motion.div 
@@ -281,10 +282,9 @@ const ModelSelectionPanel = ({
               <button
                 onClick={async () => {
                   try {
-                    const res = await fetch('/api/model/browse');
-                    const data = await res.json();
-                    if (data.status === 'success' && data.path) {
-                      setModelPath(data.path);
+                    const path = await api.browseModels();
+                    if (path) {
+                      setModelPath(path);
                     }
                   } catch (e) {
                     console.error('Browse failed', e);

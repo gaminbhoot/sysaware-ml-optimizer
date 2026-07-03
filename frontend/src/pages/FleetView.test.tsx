@@ -26,9 +26,11 @@ describe('FleetView Robustness', () => {
 
   it('renders loading state initially and then data', async () => {
     (fetch as any).mockResolvedValueOnce({
+      ok: true,
       json: async () => ({ status: 'success', history: [] })
     });
     (fetch as any).mockResolvedValueOnce({
+      ok: true,
       json: async () => ({ status: 'success', nodes: [] })
     });
 
@@ -67,9 +69,11 @@ describe('FleetView Robustness', () => {
     ];
 
     (fetch as any).mockResolvedValueOnce({
+      ok: true,
       json: async () => ({ status: 'success', history: [] })
     });
     (fetch as any).mockResolvedValueOnce({
+      ok: true,
       json: async () => ({ status: 'success', nodes: mockNodes })
     });
 
@@ -84,9 +88,11 @@ describe('FleetView Robustness', () => {
 
   it('handles malformed API response gracefully', async () => {
     (fetch as any).mockResolvedValueOnce({
+      ok: true,
       json: async () => ({ status: 'success', history: null }) // malformed history
     });
     (fetch as any).mockResolvedValueOnce({
+      ok: true,
       json: async () => ({ status: 'success', nodes: undefined }) // missing nodes
     });
 
@@ -102,6 +108,7 @@ describe('FleetView Robustness', () => {
 
   it('renders join request modal when SSE message received', async () => {
     (fetch as any).mockResolvedValue({
+      ok: true,
       json: async () => ({ status: 'success', history: [], nodes: [] })
     });
 
@@ -123,6 +130,7 @@ describe('FleetView Robustness', () => {
 
   it('renders charts tab and switches correctly', async () => {
     (fetch as any).mockResolvedValue({
+      ok: true,
       json: async () => ({ status: 'success', history: [], nodes: [] })
     });
 

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Server, Zap, History, LayoutGrid, List, Trash2, Activity, Filter, RefreshCcw, BarChart2, ChevronDown, Calendar } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { api } from '../lib/api';
 import { useNotification } from '../context/NotificationContext';
 import { FleetChart } from '../components/FleetChart';
 import type { TelemetryData } from '../components/FleetChart';
@@ -10,14 +11,11 @@ import { Badge } from '../components/ui/Badge';
 import { DataValue } from '../components/ui/DataValue';
 import { ConfirmationModal } from '../components/ui/ConfirmationModal';
 
+import type { SystemProfile } from '../types';
+
 interface NodeData {
   machine_id: string;
-  hardware_profile: {
-    cpu?: string;
-    ram_gb?: number;
-    dgpu_name?: string;
-    os?: string;
-  };
+  hardware_profile: SystemProfile;
   status: string;
   last_seen: string;
 }
@@ -102,16 +100,13 @@ export const FleetView = () => {
   const fetchData = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const [historyRes, nodesRes] = await Promise.all([
-        fetch('/api/telemetry/history'),
-        fetch('/api/fleet/active')
+      const [historyList, activeNodesList] = await Promise.all([
+        api.getTelemetryHistory(),
+        api.getActiveFleetNodes()
       ]);
       
-      const historyData = await historyRes.json();
-      const nodesData = await nodesRes.json();
-
-      if (historyData.status === 'success') setHistory(historyData.history || []);
-      if (nodesData.status === 'success') setActiveNodes(nodesData.nodes || []);
+      setHistory(historyList || []);
+      setActiveNodes(activeNodesList || []);
     } catch (e) {
       addNotification({
         type: 'error',
@@ -135,11 +130,7 @@ export const FleetView = () => {
       try {
         const apiKey = sessionStorage.getItem('sysaware_api_key');
         if (apiKey) {
-          const res = await fetch('/api/auth/stream-token', { method: 'POST' });
-          if (res.ok) {
-            const data = await res.json();
-            token = data.token;
-          }
+          token = await api.getStreamToken();
         }
       } catch (e) {
         console.error("Failed to retrieve short-lived stream token:", e);
@@ -240,16 +231,12 @@ export const FleetView = () => {
       variant: 'danger',
       onConfirm: async () => {
         try {
-          const res = await fetch(`/api/fleet/node/${id}`, { method: 'DELETE' });
-          if (res.ok) {
-            addNotification({
-              type: 'success',
-              message: `Node ${id} removed successfully.`
-            });
-            fetchData();
-          } else {
-            throw new Error('Delete failed');
-          }
+          await api.removeFleetNode(id);
+          addNotification({
+            type: 'success',
+            message: `Node ${id} removed successfully.`
+          });
+          fetchData();
         } catch (e) {
           addNotification({
             type: 'error',
@@ -270,17 +257,13 @@ export const FleetView = () => {
       variant: 'danger',
       onConfirm: async () => {
         try {
-          const res = await fetch(`/api/telemetry/history?range_type=${range}`, { method: 'DELETE' });
-          if (res.ok) {
-            addNotification({
-              type: 'success',
-              message: `History cleared for range: ${range}`
-            });
-            setShowClearDropdown(false);
-            fetchData();
-          } else {
-            throw new Error('Clear failed');
-          }
+          await api.clearTelemetryHistory(range);
+          addNotification({
+            type: 'success',
+            message: `History cleared for range: ${range}`
+          });
+          setShowClearDropdown(false);
+          fetchData();
         } catch (e) {
           addNotification({
             type: 'error',
@@ -294,15 +277,12 @@ export const FleetView = () => {
 
   const handleJoinResponse = useCallback(async (id: string, approve: boolean) => {
     try {
-      const endpoint = approve ? '/api/fleet/join/approve' : '/api/fleet/join/reject';
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ machine_id: id })
-      });
+      if (approve) {
+        await api.approveFleetJoin(id);
+      } else {
+        await api.rejectFleetJoin(id);
+      }
       
-      if (!res.ok) throw new Error('Action failed');
-
       setPendingNode(null);
       addNotification({
         type: approve ? 'success' : 'info',
