@@ -17,7 +17,7 @@ from ..helpers import (
 )
 from ..middleware import chat_concurrency
 from ..services import runtimes as runtimes_svc
-from ..config import CHAT_STREAM_TIMEOUT
+from .. import config
 
 from sysaware.core.logging_utils import get_logger
 
@@ -142,9 +142,8 @@ async def chat_stream(req: ChatRequest):
         messages = [{"role": m.role, "content": msg_content_filter(m.content)} for m in req.messages]
         
         async def event_generator():
-            import sysaware.server as server
-            is_production = getattr(server, "IS_PRODUCTION", False)
-            timeout = getattr(server, "CHAT_STREAM_TIMEOUT", CHAT_STREAM_TIMEOUT)
+            is_production = getattr(config, "IS_PRODUCTION", False)
+            timeout = getattr(config, "CHAT_STREAM_TIMEOUT", config.CHAT_STREAM_TIMEOUT)
             try:
                 has_error = False
                 async for update in runtimes_svc.chat_stream(req.host, req.port, messages, req.model_id, timeout):

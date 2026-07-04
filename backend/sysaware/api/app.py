@@ -10,12 +10,12 @@ from contextlib import asynccontextmanager
 
 from .config import (
     CORS_ORIGINS,
+    MAX_PAYLOAD_SIZES,
+    DEFAULT_MAX_PAYLOAD_SIZE,
 )
 from .middleware import (
     LimitUploadSizeMiddleware,
     security_middleware,
-    MAX_PAYLOAD_SIZES,
-    DEFAULT_MAX_PAYLOAD_SIZE,
 )
 from .routers import (
     health,

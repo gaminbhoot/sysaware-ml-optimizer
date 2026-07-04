@@ -4,10 +4,7 @@ import collections
 import asyncio
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
-from .config import (
-    IS_TEST,
-    ENV,
-)
+from . import config
 
 # --- Rate Limiting & Concurrency Infrastructure ---
 class SimpleRateLimiter:
@@ -48,19 +45,15 @@ model_concurrency = ConcurrencyTracker(max_concurrent=3)
 chat_concurrency = ConcurrencyTracker(max_concurrent=5)
 
 # --- Payload Size, Rate Limit, and Auth Middlewares ---
-MAX_PAYLOAD_SIZES = {
-    "/api/model/registry": 50 * 1024 * 1024,  # 50 MB
-}
-DEFAULT_MAX_PAYLOAD_SIZE = 2 * 1024 * 1024  # 2 MB
 
 class ContentTooLargeError(BaseException):
     pass
 
 class LimitUploadSizeMiddleware:
-    def __init__(self, app, max_payload_sizes: dict = None, default_max_size: int = DEFAULT_MAX_PAYLOAD_SIZE):
+    def __init__(self, app, max_payload_sizes: dict = None, default_max_size: int = None):
         self.app = app
-        self.max_payload_sizes = max_payload_sizes or MAX_PAYLOAD_SIZES
-        self.default_max_size = default_max_size
+        self.max_payload_sizes = max_payload_sizes or getattr(config, "MAX_PAYLOAD_SIZES", {})
+        self.default_max_size = default_max_size or getattr(config, "DEFAULT_MAX_PAYLOAD_SIZE", 2 * 1024 * 1024)
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -128,7 +121,6 @@ ADMIN_ROUTES = [
 ]
 
 async def security_middleware(request: Request, call_next):
-    import sysaware.server as server
     path = request.url.path
     client_ip = request.client.host if request.client else "unknown"
     
@@ -138,8 +130,8 @@ async def security_middleware(request: Request, call_next):
         if content_length:
             try:
                 length = int(content_length)
-                max_payload_sizes = getattr(server, "MAX_PAYLOAD_SIZES", MAX_PAYLOAD_SIZES)
-                default_max_payload_size = getattr(server, "DEFAULT_MAX_PAYLOAD_SIZE", DEFAULT_MAX_PAYLOAD_SIZE)
+                max_payload_sizes = getattr(config, "MAX_PAYLOAD_SIZES", {})
+                default_max_payload_size = getattr(config, "DEFAULT_MAX_PAYLOAD_SIZE", 2 * 1024 * 1024)
                 max_size = max_payload_sizes.get(path, default_max_payload_size)
                 if length > max_size:
                     return JSONResponse(
@@ -176,14 +168,14 @@ async def security_middleware(request: Request, call_next):
                     is_authenticated = True
 
         # Determine if we skip API auth in dev loopback mode
-        sysaware_bind = getattr(server, "SYSAWARE_BIND", "127.0.0.1")
+        sysaware_bind = getattr(config, "SYSAWARE_BIND", "127.0.0.1")
         is_loopback = sysaware_bind.strip().lower() in ["127.0.0.1", "localhost", "::1"]
-        is_dev = getattr(server, "IS_DEV", True)
+        is_dev = getattr(config, "IS_DEV", True)
         dev_no_auth = is_dev and is_loopback
 
         if not is_authenticated and not dev_no_auth:
-            sysaware_api_key = getattr(server, "SYSAWARE_API_KEY", None)
-            sysaware_admin_key = getattr(server, "SYSAWARE_ADMIN_KEY", None)
+            sysaware_api_key = getattr(config, "SYSAWARE_API_KEY", None)
+            sysaware_admin_key = getattr(config, "SYSAWARE_ADMIN_KEY", None)
             if sysaware_api_key:
                 is_valid = False
                 if provided_key:

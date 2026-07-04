@@ -9,7 +9,9 @@ def auth_client(monkeypatch):
     monkeypatch.setenv("SYSAWARE_API_KEY", "test_secret_key")
     # Re-initialize the key variable in the server module
     import sysaware.server as server
+    import sysaware.api.config as config
     monkeypatch.setattr(server, "SYSAWARE_API_KEY", "test_secret_key")
+    monkeypatch.setattr(config, "SYSAWARE_API_KEY", "test_secret_key")
     
     client = TestClient(app)
     return client
@@ -42,7 +44,9 @@ def test_api_key_auth_enforced_when_configured(auth_client):
 def test_admin_endpoints_require_admin_key(auth_client, monkeypatch):
     monkeypatch.setenv("SYSAWARE_ADMIN_KEY", "admin_secret_key")
     import sysaware.server as server
+    import sysaware.api.config as config
     monkeypatch.setattr(server, "SYSAWARE_ADMIN_KEY", "admin_secret_key")
+    monkeypatch.setattr(config, "SYSAWARE_ADMIN_KEY", "admin_secret_key")
     # Enforce separate admin key
     
     # Try calling admin endpoint with regular api key: should get 403 Forbidden
@@ -93,7 +97,9 @@ def test_self_approval_prevention():
 
 def test_production_error_masking(monkeypatch):
     import sysaware.server as server
+    import sysaware.api.config as config
     monkeypatch.setattr(server, "IS_PRODUCTION", True)
+    monkeypatch.setattr(config, "IS_PRODUCTION", True)
     
     # Analyze with non-existent allowed file should return a generic message in production
     payload = {
@@ -108,12 +114,15 @@ def test_production_error_masking(monkeypatch):
 def test_auth_enforced_by_default_in_dev_mode(monkeypatch):
     # Simulate dev mode with no API key set
     import sysaware.server as server
+    import sysaware.api.config as config
     monkeypatch.setattr(server, "ENV", "development")
+    monkeypatch.setattr(config, "ENV", "development")
     
     # We patch SYSAWARE_API_KEY to simulate what happens at startup when unset
     import secrets
     generated_key = "sysaware_" + secrets.token_hex(16)
     monkeypatch.setattr(server, "SYSAWARE_API_KEY", generated_key)
+    monkeypatch.setattr(config, "SYSAWARE_API_KEY", generated_key)
     
     client = TestClient(app)
     response = client.get("/api/fleet/active")
@@ -139,7 +148,9 @@ def test_telemetry_stream_token_auth(monkeypatch):
     # Set a fixed API key
     monkeypatch.setenv("SYSAWARE_API_KEY", "my_test_key")
     import sysaware.server as server
+    import sysaware.api.config as config
     monkeypatch.setattr(server, "SYSAWARE_API_KEY", "my_test_key")
+    monkeypatch.setattr(config, "SYSAWARE_API_KEY", "my_test_key")
     
     # Mock broker.subscribe to prevent infinite block during test stream reading
     async def mock_subscribe():
@@ -176,7 +187,9 @@ def test_chat_stream_timeout(monkeypatch):
     monkeypatch.setattr(LMStudioClient, "chat_stream", MockClient.chat_stream)
     
     # Monkeypatch CHAT_STREAM_TIMEOUT to be near zero to trigger asyncio.timeout immediately
+    import sysaware.api.config as config
     monkeypatch.setattr(server, "CHAT_STREAM_TIMEOUT", 0.001)
+    monkeypatch.setattr(config, "CHAT_STREAM_TIMEOUT", 0.001)
     
     client = TestClient(app)
     payload = {
@@ -199,9 +212,13 @@ def test_chat_stream_timeout(monkeypatch):
 
 def test_dev_no_auth_loopback(monkeypatch):
     import sysaware.server as server
+    import sysaware.api.config as config
     monkeypatch.setattr(server, "IS_DEV", True)
+    monkeypatch.setattr(config, "IS_DEV", True)
     monkeypatch.setattr(server, "SYSAWARE_BIND", "127.0.0.1")
+    monkeypatch.setattr(config, "SYSAWARE_BIND", "127.0.0.1")
     monkeypatch.setattr(server, "SYSAWARE_API_KEY", "test_key")
+    monkeypatch.setattr(config, "SYSAWARE_API_KEY", "test_key")
     
     client = TestClient(app)
     client.no_auth_inject = True
@@ -212,9 +229,13 @@ def test_dev_no_auth_loopback(monkeypatch):
 
 def test_dev_auth_non_loopback(monkeypatch):
     import sysaware.server as server
+    import sysaware.api.config as config
     monkeypatch.setattr(server, "IS_DEV", True)
+    monkeypatch.setattr(config, "IS_DEV", True)
     monkeypatch.setattr(server, "SYSAWARE_BIND", "0.0.0.0")
+    monkeypatch.setattr(config, "SYSAWARE_BIND", "0.0.0.0")
     monkeypatch.setattr(server, "SYSAWARE_API_KEY", "test_key")
+    monkeypatch.setattr(config, "SYSAWARE_API_KEY", "test_key")
     
     client = TestClient(app)
     client.no_auth_inject = True

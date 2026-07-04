@@ -16,11 +16,7 @@ from ..helpers import (
 )
 from ..middleware import model_concurrency
 from ..services import optimize as optimize_svc
-from ..config import (
-    AUTOTUNE_STREAM_TIMEOUT,
-    DIAGNOSTIC_STREAM_TIMEOUT,
-    RUNNER_TUNE_STREAM_TIMEOUT,
-)
+from .. import config
 
 router = APIRouter(prefix="/api")
 
@@ -62,9 +58,8 @@ async def autotune_stream_endpoint(req: AutotuneRequest):
         raise HTTPException(status_code=503, detail="Server is busy. Max concurrent model tasks reached.")
     
     async def event_generator():
-        import sysaware.server as server
-        is_production = getattr(server, "IS_PRODUCTION", False)
-        timeout = getattr(server, "AUTOTUNE_STREAM_TIMEOUT", AUTOTUNE_STREAM_TIMEOUT)
+        is_production = getattr(config, "IS_PRODUCTION", False)
+        timeout = getattr(config, "AUTOTUNE_STREAM_TIMEOUT", config.AUTOTUNE_STREAM_TIMEOUT)
         try:
             async for update in optimize_svc.autotune_stream(req.model_path, req.unsafe_load, req.system_profile, req.goal, timeout):
                 if isinstance(update, dict) and "detail" in update and update.get("status") == "error":
@@ -86,9 +81,8 @@ async def diagnose_custom_stream(req: DiagnosticRequest):
         raise HTTPException(status_code=503, detail="Server is busy. Max concurrent model tasks reached.")
     
     async def event_generator():
-        import sysaware.server as server
-        is_production = getattr(server, "IS_PRODUCTION", False)
-        timeout = getattr(server, "DIAGNOSTIC_STREAM_TIMEOUT", DIAGNOSTIC_STREAM_TIMEOUT)
+        is_production = getattr(config, "IS_PRODUCTION", False)
+        timeout = getattr(config, "DIAGNOSTIC_STREAM_TIMEOUT", config.DIAGNOSTIC_STREAM_TIMEOUT)
         try:
             async for update in optimize_svc.diagnose_stream(req.model_path, req.unsafe_load, timeout):
                 if isinstance(update, dict) and "detail" in update and update.get("status") == "error":
@@ -107,9 +101,8 @@ async def diagnose_custom_stream(req: DiagnosticRequest):
 async def tune_runtime_stream(req: RuntimeTuneRequest):
     try:
         async def event_generator():
-            import sysaware.server as server
-            is_production = getattr(server, "IS_PRODUCTION", False)
-            timeout = getattr(server, "RUNNER_TUNE_STREAM_TIMEOUT", RUNNER_TUNE_STREAM_TIMEOUT)
+            is_production = getattr(config, "IS_PRODUCTION", False)
+            timeout = getattr(config, "RUNNER_TUNE_STREAM_TIMEOUT", config.RUNNER_TUNE_STREAM_TIMEOUT)
             async for update in optimize_svc.tune_runtime_stream(req.model_id, req.source, req.system_profile, timeout):
                 if isinstance(update, dict) and "detail" in update and update.get("status") == "error":
                     detail = update["detail"]

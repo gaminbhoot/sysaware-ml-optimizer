@@ -113,3 +113,9 @@ else:
 
 # Unsafe Load Allowed
 SYSAWARE_ALLOW_UNSAFE_LOAD = os.getenv("SYSAWARE_ALLOW_UNSAFE_LOAD", "false").lower() == "true"
+
+# Payload Size Limits
+MAX_PAYLOAD_SIZES = {
+    "/api/model/registry": 50 * 1024 * 1024,  # 50 MB
+}
+DEFAULT_MAX_PAYLOAD_SIZE = 2 * 1024 * 1024  # 2 MB
