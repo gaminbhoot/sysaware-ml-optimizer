@@ -48,20 +48,6 @@ export const api = {
     return data.profile;
   },
 
-  async getGoal(): Promise<string> {
-    const data = await request<{ status: string; goal: string }>('/api/goal');
-    return data.goal;
-  },
-
-  async setGoal(goal: string): Promise<string> {
-    const data = await request<{ status: string; goal: string }>('/api/goal', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ goal })
-    });
-    return data.goal;
-  },
-
   // Model Manager
   async getModelRecommendations(): Promise<ModelRecommendation[]> {
     const data = await request<{ status: string; recommendations: ModelRecommendation[] }>('/api/models/recommendations');
