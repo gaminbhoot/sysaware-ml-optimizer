@@ -16,6 +16,10 @@ from ..helpers import (
 from ..middleware import model_concurrency
 from ..services import models as models_svc
 
+from sysaware.core.logging_utils import get_logger
+
+logger = get_logger("sysaware.api.routers.models")
+
 router = APIRouter(prefix="/api")
 
 @router.get("/model/browse")
@@ -31,12 +35,11 @@ async def browse_model():
         handle_api_exception(e)
 
 @router.post("/model/analyze")
-async def analyze_model_endpoint(req: AnalyzeRequest):
-    validate_model_path_and_load(req.model_path, req.unsafe_load)
-    
+async def analyze_model(req: AnalyzeRequest):
     import sysaware.server as server
     is_production = getattr(server, "IS_PRODUCTION", False)
     
+    validate_model_path_and_load(req.model_path, req.unsafe_load)
     if not os.path.exists(req.model_path):
         if is_production:
             raise HTTPException(status_code=400, detail="Failed to load or analyze model")
@@ -50,7 +53,7 @@ async def analyze_model_endpoint(req: AnalyzeRequest):
         return await models_svc.analyze_model(req.model_path, req.unsafe_load)
     except Exception as e:
         if is_production:
-            print(f"Model analysis failed: {e}")
+            logger.error(f"Model analysis failed: {e}")
             raise HTTPException(status_code=400, detail="Failed to load or analyze model")
         else:
             handle_api_exception(e)
@@ -63,7 +66,7 @@ async def unload_model(req: UnloadRequest):
         validate_host_and_port(req.host, req.port)
         return await models_svc.unload_model(req.model_id, req.host, req.port)
     except Exception as e:
-        print(f"Model Unload failed: {e}")
+        logger.error(f"Model Unload failed: {e}")
         raise HTTPException(status_code=500, detail=f"Model unload failed: {str(e)}")
 
 @router.post("/model/registry", deprecated=True)

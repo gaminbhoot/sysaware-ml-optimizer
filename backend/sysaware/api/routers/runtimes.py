@@ -19,6 +19,10 @@ from ..middleware import chat_concurrency
 from ..services import runtimes as runtimes_svc
 from ..config import CHAT_STREAM_TIMEOUT
 
+from sysaware.core.logging_utils import get_logger
+
+logger = get_logger("sysaware.api.routers.runtimes")
+
 router = APIRouter(prefix="/api")
 
 def msg_content_filter(content: str) -> str:
@@ -28,23 +32,20 @@ def msg_content_filter(content: str) -> str:
 # --- LM Studio Endpoints ---
 @router.post("/lmstudio/sync")
 async def sync_lmstudio(req: LMStudioSyncRequest):
-    print(f"\n--- LM STUDIO SYNC ATTEMPT ---")
-    print(f"Target: {req.host}:{req.port}")
+    logger.info(f"LM Studio Sync attempt target: {req.host}:{req.port}")
     try:
         validate_host_and_port(req.host, req.port)
         res = await runtimes_svc.sync_lmstudio(req.host, req.port, req.model_id)
         if not res.get("analysis"):
-            print(f"Sync Result: FAIL - No active model detected.")
+            logger.warning("LM Studio Sync Result: FAIL - No active model detected.")
             raise HTTPException(status_code=404, detail=f"No loaded model found in LM Studio at {req.host}:{req.port}. Check if 'Local Server' is ON and a model is loaded.")
-        print(f"Sync Result: SUCCESS - Active model: {res['analysis']['model_name']}")
-        print(f"-------------------------------\n")
+        logger.info(f"LM Studio Sync Result: SUCCESS - Active model: {res['analysis']['model_name']}")
         return res
     except Exception as e:
         if isinstance(e, HTTPException): 
-            print(f"Sync Result: HTTP ERROR - {e.detail}")
+            logger.warning(f"LM Studio Sync Result: HTTP ERROR - {e.detail}")
             raise e
-        print(f"Sync Result: UNEXPECTED ERROR - {str(e)}")
-        print(f"-------------------------------\n")
+        logger.error(f"LM Studio Sync Result: UNEXPECTED ERROR - {str(e)}")
         handle_api_exception(e)
 
 @router.get("/lmstudio/models")
@@ -82,23 +83,20 @@ async def unload_lmstudio_model(req: UnloadRequest):
 # --- Ollama Endpoints ---
 @router.post("/ollama/sync")
 async def sync_ollama(req: OllamaSyncRequest):
-    print(f"\n--- OLLAMA SYNC ATTEMPT ---")
-    print(f"Target: {req.host}:{req.port}")
+    logger.info(f"Ollama Sync attempt target: {req.host}:{req.port}")
     try:
         validate_host_and_port(req.host, req.port)
         res = await runtimes_svc.sync_ollama(req.host, req.port, req.model_id)
         if not res.get("analysis"):
-            print(f"Sync Result: FAIL - No loaded model detected.")
+            logger.warning("Ollama Sync Result: FAIL - No loaded model detected.")
             raise HTTPException(status_code=404, detail=f"No loaded model found in Ollama at {req.host}:{req.port}. Check if Ollama is running and a model is loaded.")
-        print(f"Sync Result: SUCCESS - Active model: {res['analysis']['model_name']}")
-        print(f"---------------------------\n")
+        logger.info(f"Ollama Sync Result: SUCCESS - Active model: {res['analysis']['model_name']}")
         return res
     except Exception as e:
         if isinstance(e, HTTPException):
-            print(f"Sync Result: HTTP ERROR - {e.detail}")
+            logger.warning(f"Ollama Sync Result: HTTP ERROR - {e.detail}")
             raise e
-        print(f"Sync Result: UNEXPECTED ERROR - {str(e)}")
-        print(f"---------------------------\n")
+        logger.error(f"Ollama Sync Result: UNEXPECTED ERROR - {str(e)}")
         handle_api_exception(e)
 
 @router.get("/ollama/models")

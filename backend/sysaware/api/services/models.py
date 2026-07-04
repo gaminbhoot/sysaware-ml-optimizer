@@ -12,6 +12,9 @@ from ...core import system_profiler as sp
 from sysaware.infrastructure.clients import ollama as ollama
 from sysaware.infrastructure.clients import lmstudio as lms
 from sysaware.infrastructure.model_loader import load_model_from_path
+from sysaware.core.logging_utils import get_logger
+
+logger = get_logger("sysaware.api.services.models")
 
 # --- Caching ---
 _analysis_cache = {}
@@ -344,7 +347,7 @@ async def get_recommendations() -> dict:
         if not recs:
             recs = [m for m in FALLBACK_MODELS if (is_metal and "MLX" in m["format"]) or (not is_metal and "GGUF" in m["format"])]
     except Exception as hf_err:
-        print(f"Failed to fetch from HF Hub: {hf_err}, using fallback models.")
+        logger.warning(f"Failed to fetch from HF Hub: {hf_err}, using fallback models.")
         recs = [m for m in FALLBACK_MODELS if (is_metal and "MLX" in m["format"]) or (not is_metal and "GGUF" in m["format"])]
         
     _RECOMMENDATIONS_CACHE[cache_key] = {
