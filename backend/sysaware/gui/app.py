@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from sysaware.core.contracts import GOALS, GOAL_LABELS
-from sysaware.core.system_profiler import get_system_profile
+from sysaware.infrastructure.system_profiler import get_system_profile
 from sysaware.core.model_analyzer import analyze_model
 from sysaware.core.prompt_optimizer import optimize_prompt
 from sysaware.core.estimator import estimate_performance

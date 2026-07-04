@@ -41,7 +41,7 @@ from .core.model_analyzer import analyze_model
 from .core.optimizer import optimize_model
 from .core.prompt_optimizer import optimize_prompt
 from .core.strategy_engine import get_strategy
-from .core.system_profiler import get_system_profile
+from .infrastructure.system_profiler import get_system_profile
 from .core.autotuner import autotune
 from .core.validation import ValidationError, set_global_seed, validate_goal
 from .core.utils import calculate_model_hash
@@ -91,7 +91,7 @@ def check_approval(server_url: str, machine_id: str):
 
 def start_heartbeat(server_url: str):
 	"""Starts a background thread to send periodic heartbeats to the server."""
-	from .core.system_profiler import get_system_profile
+	from .infrastructure.system_profiler import get_system_profile
 
 	machine_id = f"{platform.node()}_{platform.system()}"
 	profile = get_system_profile()

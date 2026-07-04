@@ -8,7 +8,7 @@ from huggingface_hub import HfApi
 
 from ...core import model_analyzer as ma
 from sysaware.infrastructure import store as store
-from ...core import system_profiler as sp
+from sysaware.infrastructure import system_profiler as sp
 from sysaware.infrastructure.clients import ollama as ollama
 from sysaware.infrastructure.clients import lmstudio as lms
 from sysaware.infrastructure.model_loader import load_model_from_path
