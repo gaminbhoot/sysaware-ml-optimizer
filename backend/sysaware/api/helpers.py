@@ -10,18 +10,7 @@ from .config import (
     SYSAWARE_ALLOW_UNSAFE_LOAD,
     IS_PRODUCTION,
 )
-from ..cli import load_model_from_path
-
-def is_path_allowed(model_path: str) -> bool:
-    try:
-        resolved_path = os.path.realpath(model_path)
-        for allowed_dir in ALLOWED_MODEL_DIRS:
-            common = os.path.commonpath([resolved_path, allowed_dir])
-            if common == allowed_dir:
-                return True
-        return False
-    except Exception:
-        return False
+from ..infrastructure.model_loader import is_path_allowed, load_model_from_path
 
 def validate_model_path_and_load(model_path: str, unsafe_load: bool = False):
     if not is_path_allowed(model_path):

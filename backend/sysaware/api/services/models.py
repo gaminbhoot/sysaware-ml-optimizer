@@ -11,7 +11,7 @@ from sysaware.infrastructure import store as store
 from ...core import system_profiler as sp
 from sysaware.infrastructure.clients import ollama as ollama
 from sysaware.infrastructure.clients import lmstudio as lms
-from ...cli import load_model_from_path
+from sysaware.infrastructure.model_loader import load_model_from_path
 
 # --- Caching ---
 _analysis_cache = {}

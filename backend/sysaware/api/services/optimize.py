@@ -2,7 +2,7 @@ import anyio
 from ...core import estimator as est
 from ...core import strategy_engine as se
 from ...core import autotuner as at
-from ...cli import load_model_from_path
+from sysaware.infrastructure.model_loader import load_model_from_path
 from ..helpers import run_generator_in_process
 
 async def estimate_baseline(model_path: str, system_profile: dict) -> dict:

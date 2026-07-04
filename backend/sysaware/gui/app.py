@@ -17,7 +17,7 @@ from sysaware.core.prompt_optimizer import optimize_prompt
 from sysaware.core.estimator import estimate_performance
 from sysaware.core.strategy_engine import get_strategy
 from sysaware.core.autotuner import autotune
-from sysaware.cli import load_model_from_path
+from sysaware.infrastructure.model_loader import load_model_from_path
 
 from sysaware.gui.helpers import clear_pipeline_state, format_range, format_memory, format_gpu_name, has_required_inputs
 
