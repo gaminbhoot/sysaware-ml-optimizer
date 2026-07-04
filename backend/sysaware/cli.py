@@ -36,7 +36,7 @@ if _env_path.exists():
 
 from .core.contracts import GOALS
 from .core.estimator import estimate_performance
-from .core.logging_utils import get_logger
+from .infrastructure.logging_utils import get_logger
 from .core.model_analyzer import analyze_model
 from .core.optimizer import optimize_model
 from .core.prompt_optimizer import optimize_prompt
@@ -45,7 +45,7 @@ from .core.system_profiler import get_system_profile
 from .core.autotuner import autotune
 from .core.validation import ValidationError, set_global_seed, validate_goal
 from .core.utils import calculate_model_hash
-from .core.memoization import get_cached_strategy, save_strategy_to_cache
+from .infrastructure.memoization import get_cached_strategy, save_strategy_to_cache
 from .core.autodiscovery import discover_server
 from .core.tui import SysAwareTUI, render_final_table, Live, box
 from .core.exporter import export_deployment_artifacts

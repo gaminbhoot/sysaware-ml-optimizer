@@ -12,7 +12,7 @@ from ...core import system_profiler as sp
 from sysaware.infrastructure.clients import ollama as ollama
 from sysaware.infrastructure.clients import lmstudio as lms
 from sysaware.infrastructure.model_loader import load_model_from_path
-from sysaware.core.logging_utils import get_logger
+from sysaware.infrastructure.logging_utils import get_logger
 
 logger = get_logger("sysaware.api.services.models")
 

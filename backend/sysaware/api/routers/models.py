@@ -16,7 +16,7 @@ from ..helpers import (
 from ..middleware import model_concurrency
 from ..services import models as models_svc
 
-from sysaware.core.logging_utils import get_logger
+from sysaware.infrastructure.logging_utils import get_logger
 
 logger = get_logger("sysaware.api.routers.models")
 

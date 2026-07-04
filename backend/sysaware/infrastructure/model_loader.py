@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import Any
 from sysaware.api.config import ALLOWED_MODEL_DIRS
-from sysaware.core.logging_utils import get_logger
+from .logging_utils import get_logger
 
 logger = get_logger("sysaware.infrastructure.model_loader")
 

@@ -2,7 +2,7 @@ import socket
 import json
 import threading
 import time
-from ..core.logging_utils import get_logger
+from .logging_utils import get_logger
 
 logger = get_logger("sysaware.discovery")
 

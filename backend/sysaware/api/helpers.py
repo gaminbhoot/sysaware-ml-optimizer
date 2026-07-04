@@ -10,7 +10,7 @@ from .config import (
     SYSAWARE_ALLOW_UNSAFE_LOAD,
     IS_PRODUCTION,
 )
-from sysaware.core.logging_utils import get_logger
+from sysaware.infrastructure.logging_utils import get_logger
 from ..infrastructure.model_loader import is_path_allowed, load_model_from_path
 
 logger = get_logger("sysaware.api.helpers")

@@ -28,7 +28,7 @@ from .routers import (
 )
 from sysaware.infrastructure import store
 from sysaware.infrastructure import discovery as discovery
-from sysaware.core.logging_utils import get_logger
+from sysaware.infrastructure.logging_utils import get_logger
 from ..core import system_profiler as sp
 
 logger = get_logger("sysaware.api.app")

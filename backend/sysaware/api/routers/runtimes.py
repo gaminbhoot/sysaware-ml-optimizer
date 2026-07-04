@@ -19,7 +19,7 @@ from ..middleware import chat_concurrency
 from ..services import runtimes as runtimes_svc
 from .. import config
 
-from sysaware.core.logging_utils import get_logger
+from sysaware.infrastructure.logging_utils import get_logger
 
 logger = get_logger("sysaware.api.routers.runtimes")
 
