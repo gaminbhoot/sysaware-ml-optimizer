@@ -10,7 +10,10 @@ from .config import (
     SYSAWARE_ALLOW_UNSAFE_LOAD,
     IS_PRODUCTION,
 )
+from sysaware.core.logging_utils import get_logger
 from ..infrastructure.model_loader import is_path_allowed, load_model_from_path
+
+logger = get_logger("sysaware.api.helpers")
 
 def validate_model_path_and_load(model_path: str, unsafe_load: bool = False):
     if not is_path_allowed(model_path):
@@ -34,9 +37,7 @@ def validate_host_and_port(host: str, port: int):
     raise HTTPException(status_code=400, detail=f"Access denied: Host '{host}' is not in the proxy allowlist.")
 
 def handle_api_exception(e: Exception):
-    print(f"API Exception: {e}")
-    import traceback
-    traceback.print_exc()
+    logger.exception(f"API Exception: {e}")
     if isinstance(e, HTTPException):
         raise e
     import sysaware.server as server

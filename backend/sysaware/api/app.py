@@ -28,7 +28,10 @@ from .routers import (
 )
 from sysaware.infrastructure import store
 from sysaware.infrastructure import discovery as discovery
+from sysaware.core.logging_utils import get_logger
 from ..core import system_profiler as sp
+
+logger = get_logger("sysaware.api.app")
 
 # --- Background Tasks ---
 async def server_heartbeat_task():
@@ -44,7 +47,7 @@ async def server_heartbeat_task():
             # We call the store directly since we're in the same process
             await anyio.to_thread.run_sync(store.update_heartbeat, machine_id, profile, "idle")
         except Exception as e:
-            print(f"Error in server heartbeat: {e}")
+            logger.error(f"Error in server heartbeat: {e}")
         await asyncio.sleep(30)
 
 # --- Lifecycle ---
