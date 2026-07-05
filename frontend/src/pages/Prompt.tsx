@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MessageCircle, Settings, X
@@ -7,11 +7,11 @@ import { cn } from '../lib/utils';
 import { useStore } from '../context/StoreContext';
 import { useNotification } from '../context/NotificationContext';
 import { api } from '../lib/api';
-import { parseThinkingTags } from '../lib/thinking';
 import { ConversationSidebar } from '../components/ConversationSidebar';
 import { PromptLab } from '../components/PromptLab';
 import { ChatWorkspace } from '../components/ChatWorkspace';
-import type { Message, Conversation } from '../types/chat';
+import { useConversations } from '../hooks/useConversations';
+import { useChatStream } from '../hooks/useChatStream';
 
 export const Prompts = () => {
   const { modelAnalysis, lmStudioHost, lmStudioPort } = useStore();
@@ -21,23 +21,6 @@ export const Prompts = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isLabSidebarOpen, setIsLabSidebarOpen] = useState(true);
   const [isConversationsSidebarOpen, setIsConversationsSidebarOpen] = useState(true);
-
-  // Conversations State (localStorage backed)
-  const [conversations, setConversations] = useState<Conversation[]>(() => {
-    const saved = localStorage.getItem('sysaware_prompt_conversations');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    return [];
-  });
-
-  const [currentChatId, setCurrentChatId] = useState<string | null>(() => {
-    return localStorage.getItem('sysaware_prompt_active_chat_id') || null;
-  });
 
   // System Prompt & Models
   const [selectedModel, setSelectedModel] = useState<string>('');
@@ -58,7 +41,6 @@ export const Prompts = () => {
 
   // Chat Input
   const [chatInput, setChatInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
 
   // Lab State
   const [labInput, setLabInput] = useState('');
@@ -66,7 +48,6 @@ export const Prompts = () => {
   const [labResult, setLabResult] = useState<any>(null);
   const [isOptimizing, setIsOptimizing] = useState(false);
 
-  const abortControllerRef = useRef<AbortController | null>(null);
   const [isInlineOptimizing, setIsInlineOptimizing] = useState(false);
 
   const HARDWARE_SUGGESTIONS = [
@@ -75,6 +56,45 @@ export const Prompts = () => {
     "Reduce redundant tokens in diagnostic prompt",
     "Design system prompt for CUDA latency optimization"
   ];
+
+  // Conversations Custom Hook
+  const {
+    conversations,
+    currentChatId,
+    setCurrentChatId,
+    activeChat,
+    chatHistory,
+    isInitialState,
+    updateActiveChatMessages,
+    updateSystemPrompt,
+    updateActiveChatModel,
+    startNewChat,
+    deleteChat,
+    renameChat,
+    setConversations
+  } = useConversations({ 
+    modelId: modelAnalysis?.model_id || modelAnalysis?.model_name || 'default', 
+    addNotification 
+  });
+
+  // Chat Streaming Custom Hook
+  const {
+    isTyping,
+    handleSendMessage: handleSendMessageHook,
+    stopGeneration,
+    handleEditMessageSubmit: handleEditMessageSubmitHook,
+    handleRegenerate
+  } = useChatStream({
+    currentChatId,
+    chatHistory,
+    selectedModel,
+    modelAnalysis,
+    lmStudioHost,
+    lmStudioPort,
+    updateActiveChatMessages,
+    setConversations,
+    addNotification
+  });
 
   const handleInlineOptimize = async () => {
     if (!chatInput.trim() || isInlineOptimizing) return;
@@ -93,54 +113,12 @@ export const Prompts = () => {
     }
   };
 
-
-  // Initialize a default conversation if list is empty
-  useEffect(() => {
-    if (conversations.length === 0) {
-      const defaultId = Math.random().toString(36).substring(2, 9);
-      const newChat: Conversation = {
-        id: defaultId,
-        title: 'Hardware Optimization Chat',
-        messages: [
-          { role: 'assistant', content: 'Inference engine established. How can I assist with your current hardware configuration?' }
-        ],
-        systemPrompt: 'You are SysAware Assistant, a hardware-aware AI. Provide concise, accurate technical advice.',
-        modelId: modelAnalysis?.model_id || modelAnalysis?.model_name || 'default',
-        createdAt: Date.now()
-      };
-      setConversations([newChat]);
-      setCurrentChatId(defaultId);
-    } else if (!currentChatId || !conversations.find(c => c.id === currentChatId)) {
-      setCurrentChatId(conversations[0].id);
-    }
-  }, []);
-
-  // Persist conversations
-  useEffect(() => {
-    localStorage.setItem('sysaware_prompt_conversations', JSON.stringify(conversations));
-  }, [conversations]);
-
-  // Persist active conversation id
-  useEffect(() => {
-    if (currentChatId) {
-      localStorage.setItem('sysaware_prompt_active_chat_id', currentChatId);
-    } else {
-      localStorage.removeItem('sysaware_prompt_active_chat_id');
-    }
-  }, [currentChatId]);
-
-  // Resolve active conversation
-  const activeChat = conversations.find(c => c.id === currentChatId);
-  const chatHistory = activeChat ? activeChat.messages : [];
-  const isInitialState = chatHistory.length === 0 || (chatHistory.length === 1 && chatHistory[0].role === 'assistant' && (chatHistory[0].content.includes('Inference engine established') || chatHistory[0].content.includes('Session reset.')));
-
   // Sync selectedModel state when activeChat's modelId updates
   useEffect(() => {
     if (activeChat?.modelId) {
       setSelectedModel(activeChat.modelId);
     }
   }, [currentChatId, activeChat?.modelId]);
-
 
   // Fetch available models from backend
   const fetchAvailableModels = async () => {
@@ -178,14 +156,7 @@ export const Prompts = () => {
       await api.loadRuntimeModel('lmstudio', host, port, modelId);
       
       setSelectedModel(modelId);
-      if (currentChatId) {
-        setConversations(prev => prev.map(c => {
-          if (c.id === currentChatId) {
-            return { ...c, modelId };
-          }
-          return c;
-        }));
-      }
+      updateActiveChatModel(modelId);
       addNotification({ type: 'success', message: `Model loaded: ${modelId}` });
     } catch (err: any) {
       console.error("Load failed:", err);
@@ -193,17 +164,6 @@ export const Prompts = () => {
     } finally {
       setIsLoadingModel(false);
     }
-  };
-
-  // Helper: Update messages list on active conversation
-  const updateActiveChatMessages = (newMessages: Message[]) => {
-    if (!currentChatId) return;
-    setConversations(prev => prev.map(c => {
-      if (c.id === currentChatId) {
-        return { ...c, messages: newMessages };
-      }
-      return c;
-    }));
   };
 
   // Optimize prompt inside the Laboratory panel
@@ -230,108 +190,8 @@ export const Prompts = () => {
     setIsOptimizing(false);
   };
 
-  // Streaming chat core completion
-  const triggerChatStream = async (historyToSend: Message[]) => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-    setIsTyping(true);
-
-    const requestHistory = [...historyToSend];
-    if (activeChat?.systemPrompt) {
-      requestHistory.unshift({ role: 'system', content: activeChat.systemPrompt });
-    }
-
-    let assistantMsg: Message = { 
-      role: 'assistant', 
-      content: '', 
-      thinking: '', 
-      thinkingDuration: 0,
-      isThinking: false
-    };
-
-    const finalHistory = [...historyToSend, assistantMsg];
-    updateActiveChatMessages(finalHistory);
-
-    const startTime = Date.now();
-    let hasThinkStarted = false;
-    let thinkEndTime = 0;
-    let fullContent = '';
-
-    try {
-      await api.streamChat(
-        requestHistory,
-        selectedModel || modelAnalysis?.model_id || modelAnalysis?.model_name || 'default',
-        lmStudioHost || '127.0.0.1',
-        lmStudioPort || 1234,
-        (data) => {
-          if (data.content) {
-            fullContent += data.content;
-
-            const parsed = parseThinkingTags(fullContent, hasThinkStarted, thinkEndTime);
-            hasThinkStarted = parsed.hasThinkStarted;
-            thinkEndTime = parsed.thinkEndTime;
-
-            const duration = thinkEndTime 
-              ? parseFloat(((thinkEndTime - startTime) / 1000).toFixed(1))
-              : parseFloat(((Date.now() - startTime) / 1000).toFixed(1));
-
-            assistantMsg = {
-              role: 'assistant',
-              content: parsed.parsedContent,
-              thinking: parsed.parsedThinking,
-              isThinking: parsed.isStillThinking,
-              thinkingDuration: hasThinkStarted ? duration : undefined
-            };
-
-            setConversations(prev => prev.map(c => {
-              if (c.id === currentChatId) {
-                const msgs = [...c.messages];
-                msgs[msgs.length - 1] = assistantMsg;
-                return { ...c, messages: msgs };
-              }
-              return c;
-            }));
-          } else if (data.error) {
-            addNotification({ type: 'error', title: 'Model Error', message: data.error });
-          }
-        },
-        controller.signal
-      );
-    } catch (e: any) {
-      if (e.name === 'AbortError') {
-        console.log('Stream aborted');
-      } else {
-        addNotification({ type: 'error', title: 'Connection Failed', message: e.message });
-      }
-    } finally {
-      setIsTyping(false);
-      abortControllerRef.current = null;
-    }
-  };
-
   const handleSendMessage = async (customMsg?: string) => {
-    const text = customMsg || chatInput;
-    if (!text.trim() || !currentChatId) return;
-
-    const userMsg: Message = { role: 'user', content: text };
-    const updatedHistory = [...chatHistory, userMsg];
-    if (!customMsg) setChatInput('');
-
-    updateActiveChatMessages(updatedHistory);
-    await triggerChatStream(updatedHistory);
-  };
-
-  // Stop current active streaming
-  const stopGeneration = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      setIsTyping(false);
-      addNotification({ type: 'info', message: 'Generation stopped.' });
-    }
+    await handleSendMessageHook(chatInput, () => setChatInput(''), customMsg);
   };
 
   // Inject lab optimization result into chat input
@@ -345,69 +205,9 @@ export const Prompts = () => {
     }
   };
 
-  // Conversation Management Helpers
-  const startNewChat = () => {
-    const defaultId = Math.random().toString(36).substring(2, 9);
-    const newChat: Conversation = {
-      id: defaultId,
-      title: `Conversation ${conversations.length + 1}`,
-      messages: [
-        { role: 'assistant', content: 'Inference engine established. How can I assist with your current hardware configuration?' }
-      ],
-      systemPrompt: 'You are SysAware Assistant, a hardware-aware AI. Provide concise, accurate technical advice.',
-      modelId: selectedModel || modelAnalysis?.model_id || modelAnalysis?.model_name || 'default',
-      createdAt: Date.now()
-    };
-    setConversations(prev => [newChat, ...prev]);
-    setCurrentChatId(defaultId);
-    addNotification({ type: 'info', message: 'New conversation started.' });
-  };
-
-  const deleteChat = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setConversations(prev => {
-      const filtered = prev.filter(c => c.id !== id);
-      if (id === currentChatId) {
-        if (filtered.length > 0) {
-          setCurrentChatId(filtered[0].id);
-        } else {
-          setCurrentChatId(null);
-        }
-      }
-      return filtered;
-    });
-    addNotification({ type: 'success', message: 'Conversation deleted.' });
-  };
-
-  const renameChat = (id: string, newTitle: string) => {
-    if (!newTitle.trim()) return;
-    setConversations(prev => prev.map(c => {
-      if (c.id === id) {
-        return { ...c, title: newTitle.trim() };
-      }
-      return c;
-    }));
-    setIsEditingConversationId(null);
-  };
-
-  // Message Actions
   const handleEditMessageSubmit = (index: number, newText: string) => {
-    if (!newText.trim() || !currentChatId) return;
-    const truncatedHistory = chatHistory.slice(0, index);
-    const updatedUserMsg: Message = { role: 'user', content: newText };
-    const finalHistory = [...truncatedHistory, updatedUserMsg];
-    updateActiveChatMessages(finalHistory);
+    handleEditMessageSubmitHook(index, newText);
     setEditingMessageIndex(null);
-    triggerChatStream(finalHistory);
-  };
-
-  const handleRegenerate = (index: number) => {
-    if (!currentChatId) return;
-    const prevUserMsgIndex = index - 1;
-    if (prevUserMsgIndex < 0 || chatHistory[prevUserMsgIndex].role !== 'user') return;
-    const finalHistory = chatHistory.slice(0, prevUserMsgIndex + 1);
-    updateActiveChatMessages(finalHistory);
-    triggerChatStream(finalHistory);
   };
 
   // Open System Instructions modal
@@ -417,15 +217,8 @@ export const Prompts = () => {
   };
 
   const saveSystemPrompt = (promptText: string) => {
-    if (currentChatId) {
-      setConversations(prev => prev.map(c => {
-        if (c.id === currentChatId) {
-          return { ...c, systemPrompt: promptText };
-        }
-        return c;
-      }));
-      addNotification({ type: 'success', message: 'System instructions saved.' });
-    }
+    updateSystemPrompt(promptText);
+    addNotification({ type: 'success', message: 'System instructions saved.' });
     setShowSystemPromptModal(false);
   };
 
