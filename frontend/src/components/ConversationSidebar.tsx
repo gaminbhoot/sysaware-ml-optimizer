@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Plus, Check, X, Edit2, Trash2 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import type { Conversation } from '../types/chat';
+import type { Conversation } from '../types';
 
 interface ConversationSidebarProps {
   conversations: Conversation[];
