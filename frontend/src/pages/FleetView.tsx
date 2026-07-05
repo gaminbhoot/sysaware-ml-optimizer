@@ -1,24 +1,17 @@
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Server, Zap, History, LayoutGrid, List, Trash2, Activity, Filter, RefreshCcw, BarChart2, ChevronDown, Calendar } from 'lucide-react';
+import { History, LayoutGrid, List, Trash2, Activity, Filter, RefreshCcw, BarChart2, ChevronDown, Calendar } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { api } from '../lib/api';
 import { useNotification } from '../context/NotificationContext';
 import { FleetChart } from '../components/FleetChart';
-import type { TelemetryData } from '../components/FleetChart';
 import { Card } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
-import { DataValue } from '../components/ui/DataValue';
 import { ConfirmationModal } from '../components/ui/ConfirmationModal';
 
-import type { SystemProfile } from '../types';
-
-interface NodeData {
-  machine_id: string;
-  hardware_profile: SystemProfile;
-  status: string;
-  last_seen: string;
-}
+import { useFleetStream } from '../hooks/useFleetStream';
+import { FleetStatsPanel } from '../components/fleet/FleetStatsPanel';
+import { CLICommandLauncher } from '../components/fleet/CLICommandLauncher';
+import { LiveNodeCard } from '../components/fleet/LiveNodeCard';
+import { HistoryRow } from '../components/fleet/HistoryRow';
 
 interface ConfirmConfig {
   isOpen: boolean;
@@ -32,38 +25,30 @@ interface ConfirmConfig {
 export const FleetView = () => {
   const { addNotification } = useNotification();
   const serverBaseUrl = `${window.location.protocol}//${window.location.host}`;
-  const ingestionUrl = `${serverBaseUrl}/api/telemetry/ingest`;
-  const proxyUrl = `${serverBaseUrl}/v1`;
-  const cliLaunchCmd = `export SYSAWARE_API_KEY="your_api_key"\npython backend/sysaware/cli.py --model-path <model_path> --server ${serverBaseUrl}`;
-  const [activeNodes, setActiveNodes] = useState<NodeData[]>([]);
-  const [history, setHistory] = useState<TelemetryData[]>([]);
-  const [pendingNode, setPendingNode] = useState<string | null>(null);
+
   const [activeTab, setActiveTab] = useState<'live' | 'history' | 'charts'>('live');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [isConnected, setIsConnected] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [showClearDropdown, setShowClearDropdown] = useState(false);
-
-  const renderStatus = (onlineText: string, offlineText: string) => (
-    <>
-      <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-emerald animate-pulse" : "bg-rose-500")} />
-      <span className={cn("text-xs font-medium", isConnected ? "text-emerald" : "text-rose-500")}>
-        {isConnected ? onlineText : offlineText}
-      </span>
-    </>
-  );
   const [statsScope, setStatsScope] = useState<'session' | 'alltime'>('session');
-  const [copiedText, setCopiedText] = useState<string | null>(null);
-  
-  const handleCopy = useCallback((text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedText(text);
-    addNotification({
-      type: 'success',
-      message: 'Copied to clipboard!'
-    });
-    setTimeout(() => setCopiedText(null), 2000);
-  }, [addNotification]);
+
+  const [confirmConfig, setConfirmConfig] = useState<ConfirmConfig>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
+  const {
+    activeNodes,
+    history,
+    pendingNode,
+    isConnected,
+    isRefreshing,
+    fetchData,
+    deleteNode,
+    clearHistory,
+    respondToJoinRequest
+  } = useFleetStream({ addNotification });
 
   const getScopedHistory = useCallback(() => {
     if (statsScope === 'session') {
@@ -76,152 +61,6 @@ export const FleetView = () => {
 
   const scopedHistory = getScopedHistory();
 
-  const peakPerformance = scopedHistory.length > 0 
-    ? Math.max(...scopedHistory.map(h => h.decode_tokens_per_sec || 0), 0)
-    : 0;
-
-  const prefillRecords = scopedHistory.filter(h => h.prefill_latency_ms !== undefined && h.prefill_latency_ms > 0);
-  const avgPrefill = prefillRecords.length > 0
-    ? prefillRecords.reduce((acc, h) => acc + (h.prefill_latency_ms || 0), 0) / prefillRecords.length
-    : 0;
-
-  const decodeRecords = scopedHistory.filter(h => h.decode_tokens_per_sec !== undefined && h.decode_tokens_per_sec > 0);
-  const avgDecode = decodeRecords.length > 0
-    ? decodeRecords.reduce((acc, h) => acc + (h.decode_tokens_per_sec || 0), 0) / decodeRecords.length
-    : 0;
-
-  const [confirmConfig, setConfirmConfig] = useState<ConfirmConfig>({
-    isOpen: false,
-    title: '',
-    message: '',
-    onConfirm: () => {},
-  });
-
-  const fetchData = useCallback(async () => {
-    setIsRefreshing(true);
-    try {
-      const [historyList, activeNodesList] = await Promise.all([
-        api.getTelemetryHistory(),
-        api.getActiveFleetNodes()
-      ]);
-      
-      setHistory(historyList || []);
-      setActiveNodes(activeNodesList || []);
-    } catch (e) {
-      addNotification({
-        type: 'error',
-        title: 'Sync Failed',
-        message: 'Could not connect to the telemetry server. Retrying...'
-      });
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [addNotification]);
-
-  useEffect(() => {
-    let pollInterval: number;
-    let eventSource: EventSource | null = null;
-    let reconnectTimeout: number;
-
-    const connectStream = async () => {
-      if (eventSource) eventSource.close();
-      
-      let token = '';
-      try {
-        const apiKey = sessionStorage.getItem('sysaware_api_key');
-        if (apiKey) {
-          token = await api.getStreamToken();
-        }
-      } catch (e) {
-        console.error("Failed to retrieve short-lived stream token:", e);
-      }
-
-      const url = token ? `/api/telemetry/stream?token=${encodeURIComponent(token)}` : '/api/telemetry/stream';
-      eventSource = new EventSource(url);
-      
-      eventSource.onopen = () => {
-        setIsConnected(true);
-        stopPolling();
-        startPolling(60000); // Slow fallback polling
-        fetchData(); // Immediate fetch on connect
-      };
-
-      eventSource.onerror = () => {
-        setIsConnected(false);
-        stopPolling();
-        startPolling(15000); // Revert to faster polling on error
-        if (eventSource) {
-          eventSource.close();
-          eventSource = null;
-        }
-        reconnectTimeout = window.setTimeout(connectStream, 5000);
-      };
-
-      eventSource.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          
-          // Basic schema validation
-          if (!message || typeof message !== 'object') return;
-
-          if (message.type === 'telemetry') {
-            const data = message.data;
-            if (!data || !data.machine_id) {
-              console.warn("Received malformed telemetry message", message);
-              return;
-            }
-
-            setHistory(prev => {
-              const newData = data;
-              if (!newData.timestamp) newData.timestamp = new Date().toISOString();
-              // Use a robust deduplication filter
-              const updated = [newData, ...prev.filter(h => 
-                !(h.machine_id === newData.machine_id && h.timestamp === newData.timestamp)
-              )];
-              return updated.slice(0, 100);
-            });
-            
-            setActiveNodes(prev => {
-              const nodeIndex = prev.findIndex(n => n.machine_id === data.machine_id);
-              if (nodeIndex === -1) return prev; 
-              const updated = [...prev];
-              updated[nodeIndex] = {
-                ...updated[nodeIndex],
-                last_seen: new Date().toISOString(),
-                status: 'active'
-              };
-              return updated;
-            });
-          } else if (message.type === 'join_request') {
-            if (message.machine_id) {
-              setPendingNode(message.machine_id);
-            }
-          }
-        } catch (e) {
-          console.error("Failed to parse SSE message", e);
-        }
-      };
-    };
-
-    const startPolling = (ms = 15000) => {
-      stopPolling();
-      pollInterval = window.setInterval(fetchData, ms);
-    };
-
-    const stopPolling = () => {
-      if (pollInterval) clearInterval(pollInterval);
-    };
-
-    fetchData(); // Initial fetch
-    connectStream();
-
-    return () => {
-      if (eventSource) eventSource.close();
-      stopPolling();
-      clearTimeout(reconnectTimeout);
-    };
-  }, [fetchData]);
-
   const handleDeleteNode = useCallback(async (id: string) => {
     setConfirmConfig({
       isOpen: true,
@@ -231,12 +70,11 @@ export const FleetView = () => {
       variant: 'danger',
       onConfirm: async () => {
         try {
-          await api.removeFleetNode(id);
+          await deleteNode(id);
           addNotification({
             type: 'success',
             message: `Node ${id} removed successfully.`
           });
-          fetchData();
         } catch (e) {
           addNotification({
             type: 'error',
@@ -246,7 +84,7 @@ export const FleetView = () => {
         }
       }
     });
-  }, [addNotification, fetchData]);
+  }, [deleteNode, addNotification]);
 
   const handleClearHistory = useCallback(async (range: string) => {
     setConfirmConfig({
@@ -257,13 +95,12 @@ export const FleetView = () => {
       variant: 'danger',
       onConfirm: async () => {
         try {
-          await api.clearTelemetryHistory(range);
+          await clearHistory(range);
           addNotification({
             type: 'success',
             message: `History cleared for range: ${range}`
           });
           setShowClearDropdown(false);
-          fetchData();
         } catch (e) {
           addNotification({
             type: 'error',
@@ -273,22 +110,15 @@ export const FleetView = () => {
         }
       }
     });
-  }, [addNotification, fetchData]);
+  }, [clearHistory, addNotification]);
 
   const handleJoinResponse = useCallback(async (id: string, approve: boolean) => {
     try {
-      if (approve) {
-        await api.approveFleetJoin(id);
-      } else {
-        await api.rejectFleetJoin(id);
-      }
-      
-      setPendingNode(null);
+      await respondToJoinRequest(id, approve);
       addNotification({
         type: approve ? 'success' : 'info',
         message: approve ? `Node ${id} approved.` : `Join request for ${id} declined.`
       });
-      if (approve) fetchData();
     } catch (e) {
       addNotification({
         type: 'error',
@@ -296,11 +126,10 @@ export const FleetView = () => {
         message: `Could not ${approve ? 'approve' : 'decline'} node ${id}.`
       });
     }
-  }, [addNotification, fetchData]);
+  }, [respondToJoinRequest, addNotification]);
 
   return (
     <div className="min-h-screen bg-background pt-10 pb-24 px-6 md:pt-14 md:pb-12 md:px-12 relative">
-      {/* Join Request Modal */}
       <AnimatePresence>
         {pendingNode && (
           <motion.div 
@@ -344,7 +173,6 @@ export const FleetView = () => {
         )}
       </AnimatePresence>
 
-      {/* Header Section */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-12 lg:mb-16 gap-8">
         <div>
           <h1 className="text-4xl md:text-5xl font-light tracking-tighter mb-2">
@@ -354,7 +182,6 @@ export const FleetView = () => {
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 md:gap-6 w-full lg:w-auto">
-          {/* Tab Switcher */}
           <div className="flex p-1 bg-white/[0.03] rounded-xl overflow-x-auto no-scrollbar scroll-smooth">
             <TabButton active={activeTab === 'live'} onClick={() => setActiveTab('live')} icon={Activity} label="Live" count={activeNodes.length} />
             <TabButton active={activeTab === 'charts'} onClick={() => setActiveTab('charts')} icon={BarChart2} label="Charts" />
@@ -363,7 +190,6 @@ export const FleetView = () => {
 
           <div className="hidden sm:block h-8 w-px bg-border" />
 
-          {/* Scope Toggle & Refresh button */}
           <div className="flex items-center gap-4">
             <div className="flex bg-white/[0.03] border border-white/[0.05] rounded-xl p-1 text-xs">
               <button 
@@ -386,75 +212,20 @@ export const FleetView = () => {
               className={cn("flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-white/[0.03] text-silver/40 hover:text-silver transition-all", isRefreshing && "text-emerald")}
             >
               <RefreshCcw size={18} className={cn(isRefreshing && "animate-spin")} />
-              <span className="text-xs font-medium sm:hidden">Refresh Data</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Analytics Overview (Three cards grid matching omlx structure) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8">
-        <StatsCard 
-          label="Active Nodes" 
-          value={`${activeNodes.filter(n => n.status === 'active' || n.status === 'benchmarking').length} / ${activeNodes.length} Online`} 
-          icon={Server} 
-          color={activeNodes.length > 0 ? "text-emerald" : "text-muted"} 
-        />
-        <StatsCard 
-          label="Peak Performance" 
-          value={`${peakPerformance.toFixed(1)} T/S`} 
-          icon={Zap} 
-        />
-        <StatsCard 
-          label="Total Benchmarks" 
-          value={`${scopedHistory.length} logs`} 
-          icon={History} 
-        />
-      </div>
+      <FleetStatsPanel activeNodes={activeNodes} scopedHistory={scopedHistory} isConnected={isConnected} />
 
-      {/* Speed Stats Panel (omlx design) */}
-      <Card className="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 md:p-8 border-transparent mb-12 relative overflow-hidden bg-white/[0.02]">
-        {/* Background visual accents */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald/5 rounded-full blur-[80px] pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-white/5 rounded-full blur-[80px] pointer-events-none" />
-        
-        <div className="flex flex-col justify-between pr-0 md:pr-8 md:border-r border-white/5">
-          <div>
-            <p className="text-luxury-mono mb-1 text-[9px] md:text-[11px] opacity-40 uppercase tracking-widest">Average Prefill Latency</p>
-            <h2 className="text-3xl md:text-5xl font-nistha mt-2 text-white font-light">
-              {avgPrefill > 0 ? `${avgPrefill.toFixed(0)}` : '—'} <span className="text-lg md:text-2xl text-muted font-sans font-light">ms</span>
-            </h2>
-            <p className="text-xs text-muted mt-2 font-light leading-relaxed">Time to process prompt tokens before output starts. Lower is better.</p>
-          </div>
-          <div className="mt-6 flex items-center gap-2">
-            {renderStatus("Real-time telemetry", "Telemetry offline")}
-          </div>
-        </div>
-        
-        <div className="flex flex-col justify-between pl-0 md:pl-8">
-          <div>
-            <p className="text-luxury-mono mb-1 text-[9px] md:text-[11px] opacity-40 uppercase tracking-widest">Average Token Generation</p>
-            <h2 className="text-3xl md:text-5xl font-nistha mt-2 text-white font-light">
-              {avgDecode > 0 ? `${avgDecode.toFixed(1)}` : '—'} <span className="text-lg md:text-2xl text-muted font-sans font-light">tok/s</span>
-            </h2>
-            <p className="text-xs text-muted mt-2 font-light leading-relaxed">Average decode throughput speed during text generation. Higher is better.</p>
-          </div>
-          <div className="mt-6 flex items-center gap-2">
-            {renderStatus("Active streaming", "Disconnected")}
-          </div>
-        </div>
-      </Card>
-
-      {/* Main Content Area Controls */}
       <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex gap-4 w-full sm:w-auto items-center">
-           {/* Filter Bar */}
            <div className="flex items-center gap-2 px-4 py-2 bg-white/[0.03] rounded-lg text-muted text-sm flex-1 sm:flex-none">
              <Filter size={14} />
              <span className="inline">Filter by HW</span>
            </div>
 
-           {/* Clear History Tool (Only in History Tab) */}
            {activeTab === 'history' && history.length > 0 && (
              <div className="relative">
                 <button 
@@ -539,58 +310,7 @@ export const FleetView = () => {
             </div>
             
             <div className="col-span-1">
-              <Card className="p-6 border-transparent bg-white/[0.01] flex flex-col justify-between h-full min-h-[300px]">
-                <div>
-                  <h4 className="text-sm text-white font-medium mb-3 flex items-center gap-2">
-                    <Server size={14} className="text-silver/60" />
-                    Connection Ingestion
-                  </h4>
-                  <p className="text-xs text-muted mb-6 font-light leading-relaxed">
-                    Configure external benchmark client nodes to stream real-time metrics back to this management console.
-                  </p>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-[10px] text-muted mb-1 uppercase font-mono tracking-wider">Ingestion Target</p>
-                      <div className="flex items-center justify-between p-2 rounded-lg bg-black/20 border border-white/5 font-mono text-[11px] text-silver/80">
-                        <span className="truncate pr-2">{ingestionUrl}</span>
-                        <button 
-                          onClick={() => handleCopy(ingestionUrl)}
-                          className="text-silver/40 hover:text-white transition-colors hover:underline text-[10px]"
-                        >
-                          {copiedText === ingestionUrl ? "Copied!" : "Copy"}
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <p className="text-[10px] text-muted mb-1 uppercase font-mono tracking-wider">OpenAI Proxy URL</p>
-                      <div className="flex items-center justify-between p-2 rounded-lg bg-black/20 border border-white/5 font-mono text-[11px] text-silver/80">
-                        <span className="truncate pr-2">{proxyUrl}</span>
-                        <button 
-                          onClick={() => handleCopy(proxyUrl)}
-                          className="text-silver/40 hover:text-white transition-colors hover:underline text-[10px]"
-                        >
-                          {copiedText === proxyUrl ? "Copied!" : "Copy"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="mt-8 pt-4 border-t border-white/5">
-                  <p className="text-[10px] text-muted mb-2 uppercase font-mono tracking-wider">CLI Launch Command</p>
-                  <div className="p-3 bg-black/30 border border-white/5 rounded-xl font-mono text-[10px] text-silver/90 whitespace-pre overflow-x-auto relative group">
-                    <code>{cliLaunchCmd}</code>
-                    <button 
-                      onClick={() => handleCopy(cliLaunchCmd)}
-                      className="absolute top-2 right-2 text-silver/40 hover:text-white text-[10px] bg-white/5 px-2 py-0.5 rounded transition-all opacity-0 group-hover:opacity-100 font-sans"
-                    >
-                      {copiedText === cliLaunchCmd ? "Copied!" : "Copy"}
-                    </button>
-                  </div>
-                </div>
-              </Card>
+              <CLICommandLauncher serverBaseUrl={serverBaseUrl} addNotification={addNotification} />
             </div>
           </motion.div>
         ) : activeTab === 'charts' ? (
@@ -659,25 +379,6 @@ const TabButton = memo(({ active, onClick, icon: Icon, label, count }: TabButton
   </button>
 ));
 
-interface StatsCardProps {
-  label: string;
-  value: string;
-  icon: React.ElementType;
-  color?: string;
-}
-
-const StatsCard = memo(({ label, value, icon: Icon, color = "text-white" }: StatsCardProps) => (
-  <Card className="flex items-center justify-between group p-5 md:p-6 border-transparent">
-    <div>
-      <p className="text-luxury-mono mb-1 text-[9px] md:text-[11px] opacity-50 group-hover:opacity-100 transition-opacity">{label}</p>
-      <h3 className={cn("text-xl md:text-2xl font-bold tracking-tight", color)}>{value}</h3>
-    </div>
-    <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-white/[0.03] flex items-center justify-center group-hover:bg-white/[0.06] transition-all">
-      <Icon size={18} className="text-silver/40 group-hover:text-silver/80 transition-colors" />
-    </div>
-  </Card>
-));
-
 const EmptyState = memo(({ message }: { message: string }) => (
   <div className="col-span-full py-20 text-center rounded-3xl p-8 bg-white/[0.01]">
     <div className="w-16 h-16 rounded-full bg-white/[0.02] flex items-center justify-center mx-auto mb-6">
@@ -685,96 +386,4 @@ const EmptyState = memo(({ message }: { message: string }) => (
     </div>
     <p className="text-muted text-base md:text-lg max-w-md mx-auto leading-relaxed">{message}</p>
   </div>
-));
-
-const LiveNodeCard = memo(({ node, onDelete }: { node: NodeData, onDelete: () => void }) => {
-  const isServer = node.machine_id.includes('local_server');
-  
-  return (
-    <Card className="group hover:bg-white/[0.04] transition-all relative overflow-hidden p-6 md:p-8 border-transparent">
-      <div className="flex justify-between items-start mb-6">
-        <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-2">
-              {isServer && <Badge variant="success">CORE SERVER</Badge>}
-              <Badge variant={node.status === 'active' || node.status === 'benchmarking' ? 'success' : 'neutral'}>
-                {node.status}
-              </Badge>
-            </div>
-            <h4 className="text-lg md:text-xl text-white font-medium truncate pr-4">{node.machine_id.split('_')[0]}</h4>
-
-           <p className="text-xs text-muted mt-1 truncate">{node.hardware_profile.cpu || 'Unknown CPU'}</p>
-        </div>
-        <button 
-          onClick={onDelete}
-          aria-label={`Remove node ${node.machine_id}`}
-          className="p-2.5 rounded-xl text-silver/20 hover:text-rose-500 hover:bg-rose-500/10 transition-all md:opacity-0 md:group-hover:opacity-100 shrink-0"
-        >
-          <Trash2 size={16} />
-        </button>
-      </div>
-
-      <div className="space-y-4 pt-4 border-t border-white/5">
-        <div className="flex justify-between items-center text-xs">
-          <span className="text-muted">System Load</span>
-          <span className="text-silver/70 font-mono">Nominal</span>
-        </div>
-        <div className="flex justify-between items-center text-xs">
-          <span className="text-muted">Last Pulse</span>
-          <span className="text-silver/70 font-mono">{new Date(node.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-        </div>
-      </div>
-
-      {/* Subtle Progress Bar */}
-      <div className="absolute bottom-0 left-0 h-[2px] bg-emerald/20 w-full overflow-hidden">
-        <motion.div 
-          className="h-full bg-emerald shadow-[0_0_8px_#10B981]"
-          initial={{ x: '-100%' }}
-          animate={{ x: '100%' }}
-          transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
-        />
-      </div>
-    </Card>
-  );
-});
-
-const HistoryRow = memo(({ record }: { record: TelemetryData }) => (
-  <Card className="px-6 md:px-8 py-5 md:py-6 flex flex-col lg:flex-row items-start lg:items-center justify-between group hover:bg-white/[0.04] transition-all gap-6 lg:gap-8 border-transparent">
-    <div className="flex items-center gap-4 md:gap-6 flex-1 w-full min-w-0">
-      <div className="w-12 h-12 rounded-2xl bg-white/[0.03] flex items-center justify-center shrink-0 transition-colors">
-        <History size={20} className="text-silver/20 group-hover:text-silver/40 transition-colors" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-3">
-          <p className="text-white font-semibold truncate text-base md:text-lg">{record.machine_id.split('_')[0]}</p>
-          {record.hardware_profile.os && (
-            <Badge variant="neutral" className="hidden sm:inline">{record.hardware_profile.os}</Badge>
-          )}
-        </div>
-        <p className="text-[10px] md:text-xs text-muted mt-1 font-mono tracking-tight">{new Date(record.timestamp).toLocaleString()}</p>
-      </div>
-    </div>
-
-    <div className="grid grid-cols-2 sm:grid-cols-4 lg:flex lg:items-center justify-items-start lg:justify-end gap-6 sm:gap-12 lg:gap-16 w-full lg:w-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-white/5">
-      <div className="min-w-0">
-        <p className="text-luxury-mono text-[9px] text-white/20 mb-1.5">Goal</p>
-        <p className="text-[10px] md:text-xs text-silver/70 capitalize font-medium">{record.goal}</p>
-      </div>
-      <DataValue 
-        label="Throughput" 
-        value={(record.decode_tokens_per_sec || 0).toFixed(1)} 
-        unit="t/s" 
-        className="text-emerald"
-      />
-      <DataValue 
-        label="P99 Latency" 
-        value={record.latency_range[1].toFixed(0)} 
-        unit="ms" 
-      />
-      <DataValue 
-        label="VRAM Usage" 
-        value={(record.memory_mb).toFixed(0)} 
-        unit="MB" 
-      />
-    </div>
-  </Card>
 ));
