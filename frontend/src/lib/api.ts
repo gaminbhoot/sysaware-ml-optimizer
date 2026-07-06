@@ -54,9 +54,9 @@ export const api = {
     return data.recommendations;
   },
 
-  // Runtime Models (LM Studio / Ollama)
   async listRuntimeModels(runtime: 'lmstudio' | 'ollama', host: string, port: number): Promise<ModelAnalysis[]> {
-    return request<ModelAnalysis[]>(`/api/${runtime}/models?host=${host}&port=${port}`);
+    const data = await request<{ status: string; models: ModelAnalysis[] }>(`/api/${runtime}/models?host=${host}&port=${port}`);
+    return data.models || [];
   },
 
   async loadRuntimeModel(runtime: 'lmstudio' | 'ollama', host: string, port: number, modelId: string): Promise<void> {
