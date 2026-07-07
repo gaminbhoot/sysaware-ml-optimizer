@@ -3,8 +3,16 @@ import secrets
 from pathlib import Path
 
 # --- Load .env if present ---
-_project_root = Path(__file__).resolve().parent.parent.parent.parent
-_env_path = _project_root / ".env"
+def _find_project_root() -> Path:
+    current = Path(__file__).resolve().parent
+    for parent in [current] + list(current.parents):
+        if (parent / "frontend").exists() or (parent / "requirements.txt").exists() or (parent / "pyproject.toml").exists():
+            return parent
+    # Fallback
+    return Path(__file__).resolve().parent.parent.parent.parent
+
+PROJECT_ROOT = _find_project_root()
+_env_path = PROJECT_ROOT / ".env"
 if _env_path.exists():
     with open(_env_path, "r", encoding="utf-8") as f:
         for line in f:

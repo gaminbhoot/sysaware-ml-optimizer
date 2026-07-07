@@ -12,6 +12,7 @@ from .config import (
     CORS_ORIGINS,
     MAX_PAYLOAD_SIZES,
     DEFAULT_MAX_PAYLOAD_SIZE,
+    PROJECT_ROOT,
 )
 from .middleware import (
     LimitUploadSizeMiddleware,
@@ -94,7 +95,7 @@ app.include_router(prompt.router)
 
 # --- Serve React Frontend ---
 # Search in root level frontend/dist
-frontend_dir = Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "dist"
+frontend_dir = PROJECT_ROOT / "frontend" / "dist"
 if frontend_dir.exists():
     app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
 else:

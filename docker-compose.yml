@@ -9,9 +9,12 @@ services:
       - "8000:8000"
     volumes:
       - ./models:/app/models
+      # Persist the database, telemetry records, and other data files
+      - ./data:/app/data
     environment:
       - ENV=production
       - SYSAWARE_BIND=0.0.0.0
+      # IMPORTANT: Change these default placeholders in production to secure tokens
       - SYSAWARE_API_KEY=prod_api_key_placeholder_change_me
       - SYSAWARE_ADMIN_KEY=prod_admin_key_placeholder_change_me
     restart: unless-stopped
