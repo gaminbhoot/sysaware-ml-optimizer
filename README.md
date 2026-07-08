@@ -92,7 +92,7 @@ SYSAWARE_BIND=0.0.0.0 SYSAWARE_API_KEY=dev_key SYSAWARE_ADMIN_KEY=dev_key python
 ```
 
 
-### 3. Training the Estimator (Optional)
+### 4. Training the Estimator (Optional)
 To update the inference predictor with the latest benchmarks:
 
 ```bash
