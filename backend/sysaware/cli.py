@@ -444,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
 		if not args.json:
 			from .core.tui import Panel
 			from .core.tui import console
-			console.print(Panel(f"[bold green]✓ Deployment Artifacts Exported[/]\\nLocation: [cyan]{deploy_path}[/]", title="Export-to-Deploy", border_style="green"))
+			console.print(Panel(f"[bold green]✓ Deployment Artifacts Exported[/]\nLocation: [cyan]{deploy_path}[/]", title="Export-to-Deploy", border_style="green"))
 
 	if args.simulate:
 		sim_report = simulate_performance(report, args.simulate)
