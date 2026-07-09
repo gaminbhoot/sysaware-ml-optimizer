@@ -59,7 +59,7 @@ sysaware-ml-optimizer/
 
 ## 🚀 Quickstart
 
-Ensure you have **Python 3.14+** and **Node.js 18+** installed.
+Ensure you have **Python 3.11+** and **Node.js 18+** installed.
 
 ### 1. Initialize the Backend
 The server handles diagnostics, proxied chat, and telemetry.
